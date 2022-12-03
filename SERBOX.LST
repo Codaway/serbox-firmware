@@ -1,0 +1,2016 @@
+000001 0000                  ; Serial interface box software
+000002 0000                  ;
+000003 0000                  ;
+000004 0000                  ;
+000005 0000                  ; 1995
+000006 0000                  ; (c) Dipl.-Ing. Gernot Kunz
+000007 0000                  
+000008 0000                  ; Memory map:
+000009 0000                  ;
+000010 0000                  ;     0000 ROM
+000011 0000                  ;        :        4K ROM
+000012 0000                  ;     0FFF ROM
+000013 0000                  ;     1000 RAM
+000014 0000                  ;        :        2K RAM
+000015 0000                  ;     17FF RAM
+000016 0000                  ;
+000017 0000                  ; IO map:
+000018 0000                  ;
+000019 0000                  ;     F8       CTC A
+000020 0000                  ;     F9       CTC B
+000021 0000                  ;     FA       CTC C
+000022 0000                  ;     FB       CTC D
+000023 0000                  ;
+000024 0000                  ;     F4       SIO 1A data
+000025 0000                  ;     F5       SIO 1A control
+000026 0000                  ;     F6       SIO 1B data
+000027 0000                  ;     F7       SIO 1B control
+000028 0000                  ;
+000029 0000                  ;     EC       SIO 2C data
+000030 0000                  ;     ED       SIO 2C control
+000031 0000                  ;     EE       SIO 2D data
+000032 0000                  ;     EF       SIO 2D control
+000033 0000                  ;
+000034 0000                  ;
+000035 0000                  ; Interrupt table:  0F00 - 0FFF
+000036 0000                  ;
+000037 0000                  ; Status variables:
+000038 0000                  ;
+000039 0000                  ;   Interface status
+000040 0000                  ;
+000041 0000                  ;                  7 6 5 4 3 2 1 0
+000042 0000                  ;                  | | | | |   |
+000043 0000                  ;                  | | | | |   DCD
+000044 0000                  ;                  | | | | CTS
+000045 0000                  ;                  | | | parity error
+000046 0000                  ;                  | | overrun error
+000047 0000                  ;                  | framing error
+000048 0000                  ;                  interface idle  
+000049 0000                  ;
+000050 0000                  ;   Line parameters
+000051 0000                  ;
+000052 0000                  ;   register A     7 6 5 4 3 2 1 0   
+000053 0000                  ;                  | | | | | | | |
+000054 0000                  ;                  | | | | | 0 0 0     600 baud
+000055 0000                  ;                  | | | | | 0 0 1    1200 baud
+000056 0000                  ;                  | | | | | 0 1 0    2400 baud
+000057 0000                  ;                  | | | | | 0 1 1    4800 baud
+000058 0000                  ;                  | | | | | 1 0 0    9600 baud
+000059 0000                  ;                  | | | | | 1 0 1   19200 baud
+000060 0000                  ;                  | | | | | 1 1 0   57600 baud                            
+000061 0000                  ;                  | | | | |
+000062 0000                  ;                  | | | 0 0 no parity
+000063 0000                  ;                  | | | 1 0 parity odd
+000064 0000                  ;                  | | | 1 1 parity even
+000065 0000                  ;                  | | | 
+000066 0000                  ;                  | 0 0 no handshake
+000067 0000                  ;                  | 0 1 XON/XOFF
+000068 0000                  ;                  | 1 0 RTS/CTS
+000069 0000                  ;                  |
+000070 0000                  ;                  0 one stop bit                   
+000071 0000                  ;                  1 two stop bits
+000072 0000                  ;
+000073 0000                  ;   register B     7 6 5 4 3 2 1 0
+000074 0000                  ;                          | | | |
+000075 0000                  ;                          | | 0 0  5 bits/char
+000076 0000                  ;                          | | 0 1  6 bits/char
+000077 0000                  ;                          | | 1 0  7 bits/char
+000078 0000                  ;                          | | 1 1  8 bits/char
+000079 0000                  ;                          | |
+000080 0000                  ;                          0 0 low XOFF treshold 1/4
+000081 0000                  ;                          0 1 medium XOFF treshold 2/4
+000082 0000                  ;                          1 0 high XOFF treshold 3/4
+000083 0000                  ;                          1 1 risky XOFF treshold 4/4
+000084 0000                  
+000085 000F                  	.equ    ITAB,   0x0F    ; Interrupt table offset
+000086 0000                  
+000087 0000                  	.equ    ROMBEG, 0x0000  ; Begin of ROM
+000088 1000                  	.equ    RAMBEG, 0x1000  ; Begin of RAM
+000089 1800                  	.equ    STACK,  0x1800  ; Top of stack
+000090 0800                  	.equ    RAMSZ,  0x800   ; Size of RAM
+000091 1000                  	.equ    ROMSZ,  0x1000  ; Size of ROM
+000092 0000                  
+000093 0000                  	.equ    SERTOUT, 0x0000 ; serial port timeout
+000094 0000                  
+000095 00F8                  	.equ    CTCA,   0xF8
+000096 00F9                  	.equ    CTCB,   0xF9
+000097 00FA                  	.equ    CTCC,   0xFA
+000098 00FB                  	.equ    CTCD,   0xFB
+000099 0000                  
+000100 00F4                  	.equ    S1AD,   0xF4
+000101 00F5                  	.equ    S1AC,   0xF5
+000102 00F6                  	.equ    S1BD,   0xF6
+000103 00F7                  	.equ    S1BC,   0xF7
+000104 0000                  
+000105 00EC                  	.equ    S2CD,   0xEC
+000106 00ED                  	.equ    S2CC,   0xED
+000107 00EE                  	.equ    S2DD,   0xEE
+000108 00EF                  	.equ    S2DC,   0xEF
+000109 0000                  
+000110 1400                  	.org 0x1400
+000111 1400                  IST_A:  .rs 1           ; interface status
+000112 1401                  IST_B:  .rs 1
+000113 1402                  IST_C:  .rs 1
+000114 1403                  IST_D:  .rs 1
+000115 1404                  
+000116 1404                  CFGBLK:
+000117 1404                  CFG_AA: .rs 1           ; configuration
+000118 1405                  CFG_AB: .rs 1
+000119 1406                  
+000120 1406                  CFG_BA: .rs 1
+000121 1407                  CFG_BB: .rs 1
+000122 1408                  
+000123 1408                  CFG_CA: .rs 1
+000124 1409                  CFG_CB: .rs 1
+000125 140A                  
+000126 140A                  CFG_DA: .rs 1
+000127 140B                  CFG_DB: .rs 1
+000128 140C                  
+000129 140C                  CHSUM:  .rs 2           ; configuration checksum
+000130 140E                  CFGEND:
+000131 140E                  SIOPRM: .rs 12          ; SIO parameters        
+000132 141A                  	
+000133 141A                  
+000134 141A                  	; BUFFERS
+000135 141A                  
+000136 1500                  	.org 0x1500
+000137 1500                  IBUF_A: .rs 0x40        ; Buffer Input Port A 
+000138 1540                  OBUF_A: .rs 0x40        ; Buffer Output Port A
+000139 1580                  
+000140 1580                  IBUF_B: .rs 0x40        ; Buffer Input Port B
+000141 15C0                  OBUF_B: .rs 0x40        ; Buffer Output Port B
+000142 1600                  
+000143 1600                  IBUF_C: .rs 0x40        ; Buffer Input Port C
+000144 1640                  OBUF_C: .rs 0x40        ; Buffer Output Port C
+000145 1680                  
+000146 1680                  IBUF_D: .rs 0x40        ; Buffer Input Port D
+000147 16C0                  OBUF_D: .rs 0x40        ; Buffer Output Port D
+000148 1700                  
+000149 0000                  	.org 0x0000
+000150 0000 C3F801           INIT:   JP START
+000151 0003                  
+000152 0003 00153C           BUFDAT: .db 0x00, 0x15, 0x3C      ; data about buffer
+000153 0006 40153C           	.db 0x40, 0x15, 0x3C
+000154 0009 80153C           	.db 0x80, 0x15, 0x3C
+000155 000C C0153C           	.db 0xC0, 0x15, 0x3C
+000156 000F 00163C           	.db 0x00, 0x16, 0x3C
+000157 0012 40163C           	.db 0x40, 0x16, 0x3C
+000158 0015 80163C           	.db 0x80, 0x16, 0x3C
+000159 0018 C0163C           	.db 0xC0, 0x16, 0x3C
+000160 001B                  
+000161 001B                  DFCFG:                            ; default configuration block
+000162 001B 1A02             DFCFGA: .db 0x1A, 0x02            ; default config port A
+000163 001D 1C02             DFCFGB: .db 0x1C, 0x02            ; default config port B
+000164 001F 1C02             DFCFGC: .db 0x1C, 0x02            ; default config port C
+000165 0021 1C02             DFCFGD: .db 0x1C, 0x02            ; default config port D
+000166 0023                  
+000167 0023                  CTCPTS:  ; table with CTC ports
+000168 0023 F8               	.db CTCA
+000169 0024 F9               	.db CTCB
+000170 0025 FA               	.db CTCC
+000171 0026 FA               	.db CTCC                  ; baud rates for ports C and D are the same
+000172 0027                  				  ; because the @#! CRC is missing one output
+000173 0027                  				  ; line!
+000174 0027                  
+000175 0027                  SIOPTS:  ; table with SIO ports
+000176 0027 F5               	.db S1AC
+000177 0028 F7               	.db S1BC
+000178 0029 ED               	.db S2CC
+000179 002A EF               	.db S2DC
+000180 002B                  
+000181 002B                  SIOVEC: ; table with SIO interrupt vectors
+000182 002B 10               	.db 0x10
+000183 002C 10               	.db 0x10
+000184 002D 20               	.db 0x20
+000185 002E 20               	.db 0x20
+000186 002F                  
+000187 002F                  BAUDTB:  ; table with CTC values for different baudrates
+000188 002F 60               	.db  96                   ;   600 baud
+000189 0030 30               	.db  48                   ;  1200 baud
+000190 0031 18               	.db  24                   ;  2400 baud
+000191 0032 0C               	.db  12                   ;  4800 baud
+000192 0033 06               	.db   6                   ;  9600 baud
+000193 0034 03               	.db   3                   ; 19200 baud
+000194 0035 01               	.db   1                   ; 57600 baud  
+000195 0036                  
+000196 0036 2101             BSTAB:  .drw B600
+000197 0038 2501             	.drw B1200
+000198 003A 2A01             	.drw B2400
+000199 003C 2F01             	.drw B4800
+000200 003E 3401             	.drw B9600
+000201 0040 3901             	.drw B19200
+000202 0042 3F01             	.drw B57600
+000203 0044                  
+000204 0044 4501             PSTAB:  .drw IGNPAR
+000205 0046 4501             	.drw IGNPAR
+000206 0048 4A01             	.drw PARODD
+000207 004A 4E01             	.drw PAREVE
+000208 004C                  
+000209 004C 5301             SSTAB:  .drw STOP1
+000210 004E 5501             	.drw STOP2
+000211 0050                  
+000212 0050 5701             HSTAB:  .drw HDSHN
+000213 0052 5C01             	.drw HDSHX
+000214 0054 6501             	.drw HDSHR
+000215 0056 6D01             	.drw HDSHI
+000216 0058                  
+000217 0058 7501             DBTAB:  .drw DBIT5
+000218 005A 7701             	.drw DBIT6
+000219 005C 7901             	.drw DBIT7
+000220 005E 7B01             	.drw DBIT8
+000221 0060                  
+000222 0066                  	.org 0x0066
+000223 0066                  	;                   Non-maskable interrupt
+000224 0066 AF               NMIST:  XOR A              
+000225 0067 6F               	LD L, A
+000226 0068 67               	LD H, A
+000227 0069 220010           	LD (RAMBEG), HL  ; clear RAM magic number
+000228 006C 220C14           	LD (CHSUM), HL   ; clear SIO config checksum to load defaults
+000229 006F C30000           	JP 0x0000
+000230 0072                  
+000231 0072 436F6D6D616E6473 HLPSTR: .db "Commands: (C)checksum (S)ystem, (P)orts, E(X)it\r\n\0"
+       007A 3A20284329636865
+       0082 636B73756D202853
+       008A 29797374656D2C20
+       0092 2850296F7274732C
+       009A 204528582969740D
+       00A2 0A00            
+000232 00A4 436F6E6669672063 CCSSTR: .db "Config checksum computed\r\n\0"
+       00AC 6865636B73756D20
+       00B4 636F6D7075746564
+       00BC 0D0A00          
+000233 00BF 496C6C6567616C20 NOPRT:  .db "Illegal port: must be A - D\r\n\0"
+       00C7 706F72743A206D75
+       00CF 7374206265204120
+       00D7 2D20440D0A00    
+000234 00DD 436F6E6669673E00 PRMPT:  .db "Config>\0"
+000235 00E5                  
+000236 00E5 4261756472617465 BDSTR:  .db "Baudrate:  \0"
+       00ED 3A202000        
+000237 00F1 5061726974793A20 PRSTR:  .db "Parity:    \0"
+       00F9 20202000        
+000238 00FD 53746F7020626974 SBSTR:  .db "Stop bits: \0"
+       0105 733A2000        
+000239 0109 48616E647368616B HSSTR:  .db "Handshake: \0"
+       0111 653A2000        
+000240 0115 4461746120626974 DBSTR:  .db "Data bits: \0"
+       011D 733A2000        
+000241 0121                  
+000242 0121 36303000         B600:   .db "600\0"
+000243 0125 3132303000       B1200:  .db "1200\0"
+000244 012A 3234303000       B2400:  .db "2400\0"
+000245 012F 3438303000       B4800:  .db "4800\0"
+000246 0134 3936303000       B9600:  .db "9600\0"
+000247 0139 313932303000     B19200: .db "19200\0"
+000248 013F 353736303000     B57600: .db "57600\0"
+000249 0145                  
+000250 0145 4E4F4E4500       IGNPAR: .db "NONE\0"
+000251 014A 4F444400         PARODD: .db "ODD\0"
+000252 014E 4556454E00       PAREVE: .db "EVEN\0"
+000253 0153                  
+000254 0153 3100             STOP1:  .db "1\0"
+000255 0155 3200             STOP2:  .db "2\0"
+000256 0157                  
+000257 0157 4E4F4E4500       HDSHN:  .db "NONE\0"
+000258 015C 584F4E2F584F4646 HDSHX:  .db "XON/XOFF\0"
+       0164 00              
+000259 0165 5254532F43545300 HDSHR:  .db "RTS/CTS\0"
+000260 016D 494C4C4547414C00 HDSHI:  .db "ILLEGAL\0"
+000261 0175                  
+000262 0175 3500             DBIT5:  .db "5\0"
+000263 0177 3600             DBIT6:  .db "6\0"
+000264 0179 3700             DBIT7:  .db "7\0"
+000265 017B 3800             DBIT8:  .db "8\0"
+000266 017D                  
+000267 017D                  CMPCRC: ; Compute CRC on a block of data
+000268 017D                  	;
+000269 017D                  	; HL: points to start of data block
+000270 017D                  	; BC: size of data block in bytes:
+000271 017D                  	;     contains CRC afterwards
+000272 017D                  	
+000273 8005                  	.equ    POLY,0x8005
+000274 017D                  
+000275 017D D9               	EXX
+000276 017E 110580           	LD DE, POLY
+000277 0181 AF               	XOR A
+000278 0182 67               	LD H,A
+000279 0183 6F               	LD L,A
+000280 0184 D9               	EXX
+000281 0185                  
+000282 0185 7E               NXTBYT: LD A,(HL)
+000283 0186                  
+000284 0186 D9               	EXX
+000285 0187 4F               	LD C,A
+000286 0188 0608             	LD B,8
+000287 018A CB21             ROTAGN: SLA C
+000288 018C CB15             	RL L
+000289 018E CB14             	RL H
+000290 0190 3006             	JR NC, NOXOR
+000291 0192                  
+000292 0192 7C               	LD A, H
+000293 0193 AA               	XOR D
+000294 0194 67               	LD H,A
+000295 0195 7D               	LD A, L 
+000296 0196 AB               	XOR E
+000297 0197 6F               	LD L, A
+000298 0198                  
+000299 0198 10F0             NOXOR:  DJNZ ROTAGN
+000300 019A D9               	EXX
+000301 019B 23               	INC HL
+000302 019C 0B               	DEC BC
+000303 019D 78               	LD A,B
+000304 019E B1               	OR C
+000305 019F 20E4             	JR NZ, NXTBYT
+000306 01A1                  
+000307 01A1 D9               	EXX
+000308 01A2 7C               	LD A, H
+000309 01A3 D9               	EXX
+000310 01A4 47               	LD B, A
+000311 01A5 D9               	EXX
+000312 01A6 7D               	LD A, L
+000313 01A7 D9               	EXX
+000314 01A8 4F               	LD C, A
+000315 01A9 C9               	RET
+000316 01AA                  
+000317 01AA                  ERRFLSH:
+000318 01AA                  	; FLASH - Error Routine: flash LED n times: m times 
+000319 01AA                  	;
+000320 01AA                  	; Register D: n
+000321 01AA                  	; Register E: m
+000322 01AA                  
+000323 1F40                  	.equ    SHTDLY, 8000    ; short delay
+000324 0000                  	.equ    LNGDLY, 0       ; long delay
+000325 01AA                   
+000326 01AA 43               	LD B, E
+000327 01AB                  NXTRPT:
+000328 01AB 58               	LD E, B
+000329 01AC 42               	LD B, D          ; load flash counter
+000330 01AD                  
+000331 01AD 3E05             FLAGN:  LD A,5
+000332 01AF D3EF             	OUT(S2DC),A
+000333 01B1 3E80             	LD A,0x80       ; DTR on (LED on)
+000334 01B3 D3EF             	OUT(S2DC),A
+000335 01B5                  
+000336 01B5 21401F           	LD HL, SHTDLY
+000337 01B8 2B               DELY1:  DEC HL  
+000338 01B9 7C               	LD A,H
+000339 01BA B5               	OR L
+000340 01BB 20FB             	JR NZ, DELY1
+000341 01BD                  
+000342 01BD 3E05             	LD A,5
+000343 01BF D3EF             	OUT(S2DC),A
+000344 01C1 AF               	XOR A           ; DTR off (LED off)
+000345 01C2 D3EF             	OUT(S2DC),A
+000346 01C4                  
+000347 01C4 21401F           	LD HL, SHTDLY
+000348 01C7 2B               DELY2:  DEC HL
+000349 01C8 7C               	LD A,H
+000350 01C9 B5               	OR L
+000351 01CA 20FB             	JR NZ, DELY2
+000352 01CC                  
+000353 01CC 10DF             	DJNZ FLAGN
+000354 01CE                  
+000355 01CE 210000           	LD HL, LNGDLY
+000356 01D1 2B               DELY3:  DEC HL
+000357 01D2 7C               	LD A,H
+000358 01D3 B5               	OR L
+000359 01D4 20FB             	JR NZ, DELY3
+000360 01D6                  
+000361 01D6 43               	LD B, E
+000362 01D7 10D2             	DJNZ NXTRPT
+000363 01D9                  
+000364 01D9 C9               	RET
+000365 01DA                  
+000366 01DA                  INTCT_A:        ; CTC channel A interrupt routine
+000367 01DA                  		; test purposes only: increment HL
+000368 01DA 23               	INC HL
+000369 01DB FB               	EI
+000370 01DC ED4D             	RETI
+000371 01DE                  
+000372 01DE                  INTCT_B:
+000373 01DE                  INTCT_C:
+000374 01DE                  INTCT_D:        ; CTC channel B,C,D interrupt routine
+000375 01DE                  		; never used: do nothing
+000376 01DE FB               	EI
+000377 01DF ED4D             	RETI
+000378 01E1                  
+000379 01E1                  	; compute checksum and store in config block
+000380 01E1 210C14           CFGCSM: LD HL, CHSUM
+000381 01E4 AF               	XOR A 
+000382 01E5 77               	LD (HL),A
+000383 01E6 23               	INC HL
+000384 01E7 77               	LD (HL),A
+000385 01E8 210414           	LD HL, CFGBLK
+000386 01EB 010A00           	LD BC, CFGEND - CFGBLK
+000387 01EE CD7D01           	CALL CMPCRC
+000388 01F1 210C14           	LD HL, CHSUM
+000389 01F4 70               	LD (HL), B
+000390 01F5 23               	INC HL
+000391 01F6 71               	LD (HL), C
+000392 01F7 C9               	RET
+000393 01F8                  
+000394 01F8                  	;
+000395 01F8                  	; Here is where it all starts
+000396 01F8                  	;
+000397 01F8                  	; Why do all assembler programs start somewhere
+000398 01F8                  	; in the middle, with a wasteful jump from zero?
+000399 01F8                  	; Well, don't ask me, but I follow the tradition here.
+000400 01F8                  
+000401 01F8 210018           START:  LD HL,STACK     ; initialize stack pointer
+000402 01FB F9               	LD SP,HL
+000403 01FC                  
+000404 01FC 210010           RAMTST: LD HL, RAMBEG   ; test all of RAM: cannot be a subroutine,
+000405 01FF 010008           	LD BC, RAMSZ    ; because the stack may not work on buggy RAM
+000406 0202 1826             	JR RAMLOP
+000407 0204                  
+000408 0204 1601             RAMERR: LD D, 1         ; flash LED once, if RAM is broken
+000409 0206 1E00             	LD E, 0
+000410 0208 CDAA01           	CALL ERRFLSH
+000411 020B 18F7             	JR RAMERR
+000412 020D                  
+000413 020D 56               RAMRPT: LD D,(HL)       ; retrieve and save old byte
+000414 020E AF               	XOR A           ; test all zeroes
+000415 020F 77               	LD (HL),A
+000416 0210 BE               	CP (HL)
+000417 0211 20F1             	JR NZ, RAMERR
+000418 0213                  
+000419 0213 2F               	CPL             ; test all ones
+000420 0214 77               	LD (HL),A
+000421 0215 BE               	CP (HL)
+000422 0216 20EC             	JR NZ, RAMERR
+000423 0218                  
+000424 0218 3E55             	LD A, 0x55      ; odd ones
+000425 021A 77               	LD (HL), A
+000426 021B BE               	CP (HL)
+000427 021C 20E6             	JR NZ, RAMERR
+000428 021E                  	
+000429 021E 2F               	CPL             ; even ones
+000430 021F 77               	LD (HL), A
+000431 0220 BE               	CP (HL)
+000432 0221 20E1             	JR NZ, RAMERR
+000433 0223                  
+000434 0223 7A               	LD A,D          ; original value
+000435 0224 77               	LD (HL),A
+000436 0225 BE               	CP(HL)
+000437 0226 20DC             	JR NZ, RAMERR
+000438 0228                  
+000439 0228 23               	INC HL
+000440 0229 0B               	DEC BC
+000441 022A 78               RAMLOP: LD A,B
+000442 022B B1               	OR C
+000443 022C 20DF             	JR NZ, RAMRPT
+000444 022E                  
+000445 022E                  	;
+000446 022E                  	; if we are here, all RAM is OK
+000447 022E 210000           ROMTST: LD HL, ROMBEG   ; test ROM checksum
+000448 0231 010010           	LD BC, ROMSZ
+000449 0234 CD7D01           	CALL CMPCRC     ; compute checksum into BC: must be zero
+000450 0237                  
+000451 0237 78               	LD A, B
+000452 0238 B1               	OR C
+000453 0239 2809             	JR Z, ROMOK
+000454 023B                  
+000455 023B 1602             ROMERR: LD D, 2         ; flash LED twice if ROM is broken
+000456 023D 1E00             	LD E, 0
+000457 023F CDAA01           	CALL ERRFLSH
+000458 0242 18F7             	JR ROMERR
+000459 0244                  
+000460 0244                  ROMOK:  ; we are in good shape: RAM and ROM OK: enable interrupts
+000461 0244 3E0F             	LD A, ITAB
+000462 0246 ED47             	LD I,A
+000463 0248 ED5E             	IM 2
+000464 024A FB               	EI
+000465 024B                  
+000466 03E8                  	.equ TSTDLY, 1000
+000467 024B                  	; Now test presence and proper operation of
+000468 024B                  	; CRC chip: program channel A so it interrupts
+000469 024B                  	; every 256 cycles and increments HL. Then go into
+000470 024B                  	; a loop of about 10000 cycles and, at the end,
+000471 024B                  	; look if HL has been incremented.
+000472 024B                    
+000473 024B AF               CTCTST: XOR A
+000474 024C 67               	LD H,A
+000475 024D 6F               	LD L,A          ; clear HL
+000476 024E D3F8             	OUT(CTCA),A     ; interrupt vector
+000477 0250 3E85             	LD A,0x85       ; intr enable, time constant follows
+000478 0252 D3F8             	OUT(CTCA),A
+000479 0254 3E10             	LD A,16         ; time constant
+000480 0256 D3F8             	OUT(CTCA),A
+000481 0258                  
+000482 0258 01E803           	LD BC, TSTDLY
+000483 025B 0B               CRCRPT: DEC BC
+000484 025C 78               	LD A,B
+000485 025D B1               	OR C
+000486 025E 20FB             	JR NZ,CRCRPT    
+000487 0260                  
+000488 0260 3E03             	LD A,0x03       ; intr disable, reset
+000489 0262 D3F8             	OUT(CTCA),A
+000490 0264 F3               	DI
+000491 0265                  
+000492 0265 7C               	LD A, H
+000493 0266 B5               	OR L
+000494 0267 2009             	JR NZ, CTCOK
+000495 0269                  
+000496 0269 1603             CTCERR: LD D, 3         ; CTC error: flash LED 3 times
+000497 026B 1E00             	LD E, 0
+000498 026D CDAA01           	CALL ERRFLSH
+000499 0270 18F7             	JR CTCERR
+000500 0272                  
+000501 0272                  CTCOK:  ; CTC test successfully completed
+000502 0272                  	; test SIO reaction: by writing and reading interrupt vectors
+000503 0272 3E18             	LD A, 0x18      ; channel reset
+000504 0274 D3F7             	OUT (S1BC), A
+000505 0276 D3EF             	OUT (S2DC), A
+000506 0278                  
+000507 0278 3E01             	LD A, 0x01
+000508 027A D3F7             	OUT (S1BC), A
+000509 027C D3EF             	OUT (S2DC),A
+000510 027E                  
+000511 027E AF               	XOR A           ; clear register 1: status doesn't affect vector
+000512 027F D3F7             	OUT (S1BC), A
+000513 0281 D3EF             	OUT (S2DC),A
+000514 0283                  	
+000515 0283 3E02             	LD A, 0x02
+000516 0285 D3F7             	OUT (S1BC), A
+000517 0287 D3EF             	OUT (S2DC),A
+000518 0289                  	
+000519 0289 3E5A             	LD A, 0x5A      ; test pattern 1
+000520 028B D3F7             	OUT (S1BC),A    ; write to interrupt vector register
+000521 028D D3EF             	OUT (S2DC),A    ; same with SIO 2
+000522 028F                  	
+000523 028F 3E02             	LD A, 0x02
+000524 0291 D3F7             	OUT (S1BC), A
+000525 0293 D3EF             	OUT (S2DC),A
+000526 0295                  
+000527 0295 DBF7             	IN A,(S1BC)
+000528 0297 FE5A             	CP 0x5A
+000529 0299 2024             	JR NZ, S1ERR
+000530 029B                  
+000531 029B DBEF             	IN A,(S2DC)
+000532 029D FE5A             	CP 0x5A
+000533 029F 2027             	JR NZ, S2ERR
+000534 02A1                  
+000535 02A1 3E02             	LD A, 0x02
+000536 02A3 D3F7             	OUT(S1BC), A
+000537 02A5 D3EF             	OUT(S2DC), A
+000538 02A7                  
+000539 02A7 3EA5             	LD A, 0xA5
+000540 02A9 D3F7             	OUT (S1BC),A
+000541 02AB D3EF             	OUT (S2DC),A
+000542 02AD                  	
+000543 02AD 3E02             	LD A, 0x02
+000544 02AF D3F7             	OUT (S1BC), A
+000545 02B1 D3EF             	OUT (S2DC), A
+000546 02B3                  
+000547 02B3 DBF7             	IN A,(S1BC)
+000548 02B5 FEA5             	CP 0xA5
+000549 02B7 2006             	JR NZ, S1ERR
+000550 02B9                  
+000551 02B9 DBEF             	IN A,(S2DC)
+000552 02BB FEA5             	CP 0xA5
+000553 02BD 2812             	JR Z, SIOOK
+000554 02BF                  
+000555 02BF 1604             S1ERR:  LD D, 4         ; SIO 1 error: flash LED 4 times
+000556 02C1 1E00             	LD E, 0
+000557 02C3 CDAA01           	CALL ERRFLSH
+000558 02C6 18F7             	JR S1ERR
+000559 02C8                  
+000560 02C8 1605             S2ERR:  LD D, 5         ; SIO 2 error: flash LED 5 times
+000561 02CA 1E00             	LD E, 0 
+000562 02CC CDAA01           	CALL ERRFLSH
+000563 02CF 18F7             	JR S2ERR
+000564 02D1                  
+000565 02D1                  SIOOK:  ; SIO test successfully completed
+000566 02D1                  	; check RAM override program area for magic number 0x1357
+000567 02D1                  	; magic stored in location: RAM Begin
+000568 02D1                  	; if present, compute checksum of RAM override area
+000569 02D1                  	; length stored in location: RAM Begin + 2 bytes
+000570 02D1                  	; if OK, start RAM program, else continue
+000571 02D1                  	
+000572 02D1 210010           	LD HL, RAMBEG
+000573 02D4 7E               	LD A, (HL)
+000574 02D5 FE57             	CP 0x57
+000575 02D7 2042             	JR NZ, NOMGC
+000576 02D9 23               	INC HL
+000577 02DA 7E               	LD A, (HL)
+000578 02DB FE13             	CP 0x13
+000579 02DD 203C             	JR NZ, NOMGC
+000580 02DF                  
+000581 02DF 23               	INC HL
+000582 02E0 4E               	LD C,(HL)
+000583 02E1 23               	INC HL
+000584 02E2 46               	LD B,(HL)
+000585 02E3 2B               	DEC HL
+000586 02E4 2B               	DEC HL
+000587 02E5 2B               	DEC HL
+000588 02E6                  
+000589 02E6 CD7D01           	CALL CMPCRC
+000590 02E9 78               	LD A, B
+000591 02EA B1               	OR C
+000592 02EB 2027             	JR NZ, CRCERR
+000593 02ED                  
+000594 02ED 210410           	LD HL,RAMBEG + 4    ; execute override program
+000595 02F0 E9               	JP (HL)
+000596 02F1                  
+000597 02F1 AF               RESETA: XOR A               ; reset port A
+000598 02F2 F3               	DI
+000599 02F3 CDC404           	CALL INITSIO
+000600 02F6 FB               	EI
+000601 02F7 185E             	JR IDLE2
+000602 02F9                  
+000603 02F9 3E01             RESETB: LD A, 1             ; reset port B
+000604 02FB F3               	DI
+000605 02FC CDC404           	CALL INITSIO
+000606 02FF FB               	EI
+000607 0300 1850             	JR IDLE1
+000608 0302                  
+000609 0302 3E02             RESETC: LD A, 2             ; reset port C
+000610 0304 F3               	DI
+000611 0305 CDC404           	CALL INITSIO
+000612 0308 FB               	EI
+000613 0309 1847             	JR IDLE1
+000614 030B                  
+000615 030B 3E03             RESETD: LD A, 3             ; reset port D
+000616 030D F3               	DI
+000617 030E CDC404           	CALL INITSIO
+000618 0311 FB               	EI
+000619 0312 183E             	JR IDLE1
+000620 0314                  
+000621 0314 1606             CRCERR: LD D, 6             ; flash LED 6 times: 3 times
+000622 0316 1E03             	LD E, 3
+000623 0318 CDAA01           	CALL ERRFLSH
+000624 031B                  
+000625 031B                  NOMGC:  ; if no magic number continue
+000626 031B                  	; check RAM SIO config block checksum
+000627 031B                  	
+000628 031B 210414           	LD HL,CFGBLK 
+000629 031E 010A00           	LD BC,CFGEND - CFGBLK
+000630 0321 CD7D01           	CALL CMPCRC
+000631 0324                  
+000632 0324 78               	LD A,B
+000633 0325 B1               	OR C
+000634 0326 2815             	JR Z, CFGOK
+000635 0328                  
+000636 0328 1607             	LD D, 7             ; flash LED 7 times: 3 times
+000637 032A 1E03             	LD E, 3
+000638 032C CDAA01           	CALL ERRFLSH
+000639 032F                  
+000640 032F                  	; if not ok, load default values
+000641 032F 211B00           	LD HL, DFCFG
+000642 0332 110414           	LD DE, CFGBLK
+000643 0335 010800           	LD BC, 8
+000644 0338 EDB0             	LDIR
+000645 033A                  
+000646 033A CDE101           	CALL CFGCSM
+000647 033D                  
+000648 033D                  CFGOK:  ; configuration OK
+000649 033D                  	; or serial timeout: initialize everything anew
+000650 033D                  	; initialize status variables
+000651 033D F3               	DI              ; disable interrupts
+000652 033E AF               	XOR A
+000653 033F CDC404           	CALL INITSIO
+000654 0342 3E01             	LD A, 1
+000655 0344 CDC404           	CALL INITSIO
+000656 0347 3E02             	LD A, 2
+000657 0349 CDC404           	CALL INITSIO
+000658 034C 3E03             	LD A, 3
+000659 034E CDC404           	CALL INITSIO
+000660 0351 FB               	EI                  ; enable interrupts
+000661 0352                  
+000662 0352                  	; Multiplexerlogik:
+000663 0352 CD9D08           IDLE1:  CALL CSTS_A         ; standby mode: wait for characters ports A/C
+000664 0355 2028             	JR NZ, A1
+000665 0357 CD090A           IDLE2:  CALL CSTS_C
+000666 035A 2011          H   	JR NZ, ID1_XC     
+000667 035C                  	
+000668 035C 3A0014           	LD A, (IST_A)
+000669 035F E670             	AND 0x70            ; errors port A
+000670 0361 C2F102           	JP NZ, RESETA
+000671 0364                  
+000672 0364 3A0214           	LD A, (IST_C)         ; errors port C
+000673 0367 E670             	AND 0x70
+000674 0369 2097             	JR NZ, RESETC
+000675 036B 18E5             	JR IDLE1
+000676 036D                  
+000677 036D CDCF09           ID1_XC: CALL CI_C           ; character from port C (PSION)
+000678 0370                  	
+000679 0370 FE40             	CP '@'              ; catch escape sequence
+000680 0372 CAE903           	JP Z, ESCAPE 
+000681 0375 4F               	LD C,A
+000682 0376 CD2C09           	CALL CO_B           ; thru to B (Hercules)
+000683 0379 FE0D             	CP 0x0D
+000684 037B 2850             	JR Z,C2
+000685 037D 1835             	JR C1
+000686 037F                  
+000687 037F 210000           A1:     LD HL, SERTOUT
+000688 0382                  
+000689 0382 2B               A11:    DEC HL
+000690 0383 7C               	LD A, H
+000691 0384 B5               	OR L
+000692 0385 CAF102           	JP Z, RESETA
+000693 0388                  	
+000694 0388 CD9D08           	CALL CSTS_A         ; wait for characters from A (Mast display)
+000695 038B 28F5             	JR Z, A11
+000696 038D CD6308           	CALL CI_A           ; get port A character
+000697 0390 4F               	LD C,A
+000698 0391 CD2C09           	CALL CO_B           ; thru to B (Hercules)
+000699 0394 FE0D             	CP 0x0D             ; on CR character end this mode
+000700 0396 20EA             	JR NZ, A11
+000701 0398                  
+000702 0398 210000           A2:     LD HL, SERTOUT
+000703 039B                  
+000704 039B 2B               A22:    DEC HL
+000705 039C 7C               	LD A, H
+000706 039D B5               	OR L
+000707 039E CAF902           	JP Z, RESETB
+000708 03A1                  
+000709 03A1 CD5309           	CALL CSTS_B         ; wait for response from B (Hercules)
+000710 03A4 28F5             	JR Z, A22
+000711 03A6 CD1909           	CALL CI_B           ; get port B character
+000712 03A9 4F               	LD C,A
+000713 03AA CD7608           	CALL CO_A           ; thru to A (Mast display)
+000714 03AD FE0D             	CP 0x0D             ; on CR character back to idle mode
+000715 03AF CA5703           	JP Z,IDLE2
+000716 03B2 18E7             	JR A22
+000717 03B4                  
+000718 03B4 210000           C1:     LD HL, SERTOUT
+000719 03B7                  
+000720 03B7 2B               C11:    DEC HL
+000721 03B8 7C               	LD A, H
+000722 03B9 B5               	OR L
+000723 03BA CA0203           	JP Z, RESETC
+000724 03BD                  
+000725 03BD CD090A           	CALL CSTS_C
+000726 03C0 28F5             	JR Z, C11
+000727 03C2 CDCF09           	CALL CI_C
+000728 03C5 4F               	LD C,A
+000729 03C6 CD2C09           	CALL CO_B
+000730 03C9 FE0D             	CP 0x0D
+000731 03CB 20EA             	JR NZ, C11
+000732 03CD                  
+000733 03CD 210000           C2:     LD HL, SERTOUT
+000734 03D0                  
+000735 03D0 2B               C22:    DEC HL
+000736 03D1 7C               	LD A, H
+000737 03D2 B5               	OR L
+000738 03D3 CAF902           	JP Z, RESETB
+000739 03D6                  
+000740 03D6 CD5309           	CALL CSTS_B
+000741 03D9 28F5             	JR Z, C22
+000742 03DB CD1909           	CALL CI_B
+000743 03DE 4F               	LD C,A
+000744 03DF CDE209           	CALL CO_C
+000745 03E2 FE0D             	CP 0x0D
+000746 03E4 CA5203           	JP Z, IDLE1
+000747 03E7 18E7             	JR C22
+000748 03E9                  
+000749 03E9 CDD005           ESCAPE: CALL CRLF
+000750 03EC 21DD00           	LD HL, PRMPT
+000751 03EF CDDA05           	CALL LPRINT
+000752 03F2 CDCF09           ECHO:   CALL CI_C
+000753 03F5 CD9005           	CALL OUTCH
+000754 03F8 FE43             	CP 'C'
+000755 03FA CA1904           	JP Z, CCSM
+000756 03FD FE53             	CP 'S'
+000757 03FF CA7406           	JP Z, MSTART
+000758 0402 FE50             	CP 'P'
+000759 0404 CA3204           	JP Z, PORTS
+000760 0407 FE3F             	CP '?'
+000761 0409 281C             	JR Z, HELP
+000762 040B FE58             	CP 'X'
+000763 040D CA5203           	JP Z, IDLE1
+000764 0410 FE0D             	CP '\r'
+000765 0412 20DE             	JR NZ, ECHO
+000766 0414 CDD005           	CALL CRLF
+000767 0417 18D0             	JR ESCAPE
+000768 0419                   
+000769 0419 CDE101           CCSM:   CALL CFGCSM
+000770 041C CDD005           	CALL CRLF
+000771 041F 21A400           	LD HL, CCSSTR
+000772 0422 CDDA05           	CALL LPRINT
+000773 0425 18C2             	JR ESCAPE
+000774 0427                  
+000775 0427 CDD005           HELP:   CALL CRLF
+000776 042A 217200           	LD HL, HLPSTR
+000777 042D CDDA05           	CALL LPRINT
+000778 0430 18B7             	JR ESCAPE
+000779 0432                  
+000780 0432 CDCF09           PORTS:  CALL CI_C
+000781 0435 CD9005           	CALL OUTCH
+000782 0438 FE41             	CP 'A'
+000783 043A 3810             	JR C, PRTERR
+000784 043C FE45             	CP 'E'
+000785 043E 300C             	JR NC, PRTERR
+000786 0440 D641             	SUB 'A'
+000787 0442 F5               	PUSH AF
+000788 0443 CDD005           	CALL CRLF
+000789 0446 F1               	POP AF
+000790 0447 CD5704           	CALL PRTCFG
+000791 044A 189D             	JR ESCAPE
+000792 044C                  
+000793 044C CDD005           PRTERR: CALL CRLF
+000794 044F 21BF00           	LD HL, NOPRT
+000795 0452 CDDA05           	CALL LPRINT  
+000796 0455 1892             	JR ESCAPE
+000797 0457                  
+000798 0457 CB27             PRTCFG: SLA A
+000799 0459 210414           	LD HL, CFGBLK    
+000800 045C 4F               	LD C, A
+000801 045D AF               	XOR A
+000802 045E 47               	LD B,A
+000803 045F 09               	ADD HL, BC
+000804 0460 56               	LD D,(HL)
+000805 0461 23               	INC HL
+000806 0462 5E               	LD E,(HL)
+000807 0463                  
+000808 0463 21E500           	LD HL,BDSTR
+000809 0466 CDDA05           	CALL LPRINT
+000810 0469 213600           	LD HL, BSTAB
+000811 046C 7A               	LD A,D
+000812 046D E607             	AND 0x07
+000813 046F CB27             	SLA A
+000814 0471 CDB704           	CALL PDSTR
+000815 0474                  	
+000816 0474 21F100           	LD HL,PRSTR
+000817 0477 CDDA05           	CALL LPRINT
+000818 047A 214400           	LD HL, PSTAB
+000819 047D 7A               	LD A,D
+000820 047E 0F               	RRCA
+000821 047F 0F               	RRCA
+000822 0480 E606             	AND 0x06
+000823 0482 CDB704           	CALL PDSTR
+000824 0485                  	
+000825 0485 210901           	LD HL,HSSTR
+000826 0488 CDDA05           	CALL LPRINT
+000827 048B 215000           	LD HL, HSTAB
+000828 048E 7A               	LD A,D
+000829 048F 07               	RLCA
+000830 0490 07               	RLCA
+000831 0491 07               	RLCA
+000832 0492 07               	RLCA
+000833 0493 E606             	AND 0x06
+000834 0495 CDB704           	CALL PDSTR
+000835 0498                  	
+000836 0498 211501           	LD HL, DBSTR
+000837 049B CDDA05           	CALL LPRINT
+000838 049E 215800           	LD HL, DBTAB
+000839 04A1 7B               	LD A,E
+000840 04A2 CB27             	SLA A
+000841 04A4 E606             	AND 0x06
+000842 04A6 CDB704           	CALL PDSTR
+000843 04A9                  
+000844 04A9 21FD00           	LD HL,SBSTR
+000845 04AC CDDA05           	CALL LPRINT
+000846 04AF 214C00           	LD HL, SSTAB
+000847 04B2 7A               	LD A,D
+000848 04B3 07               	RLCA
+000849 04B4 07               	RLCA
+000850 04B5 E602             	AND 0x02
+000851 04B7                  
+000852 04B7 4F               PDSTR:  LD C,A
+000853 04B8 09               	ADD HL, BC
+000854 04B9 4E               	LD C,(HL)
+000855 04BA 23               	INC HL
+000856 04BB 7E               	LD A,(HL)
+000857 04BC 67               	LD H,A
+000858 04BD 69               	LD L,C
+000859 04BE CDDA05           	CALL LPRINT
+000860 04C1 C3D005           	JP CRLF
+000861 04C4                  
+000862 04C4                  INITSIO:        ; initialize SIO channel
+000863 04C4                  		; register A contains a number from 0 to 3 designating the
+000864 04C4                  		; port
+000865 04C4                  					    
+000866 04C4 57               	LD D,A          ; channel number into C' and D
+000867 04C5                  	
+000868 04C5 D9               	EXX
+000869 04C6 4F               	LD C,A           
+000870 04C7 CB21             	SLA C           ; multiply by 2
+000871 04C9 AF               	XOR A           ; clear B'
+000872 04CA 47               	LD B,A
+000873 04CB 210414           	LD HL, CFGBLK   ; get config register adress into HL'
+000874 04CE 09               	ADD HL, BC
+000875 04CF 56               	LD D, (HL)      ; first config register into D' and A
+000876 04D0 23               	INC HL
+000877 04D1 7E               	LD A, (HL)      ; second config register into A
+000878 04D2 5F               	LD E, A
+000879 04D3 E602             	AND 0x02        ; flip bits of character length selector
+000880 04D5 0F               	RRCA         
+000881 04D6 0F               	RRCA         
+000882 04D7 B3               	OR E        
+000883 04D8 E681             	AND 0x81    
+000884 04DA 0F               	RRCA        
+000885 04DB 5F               	LD E,A          ; E' now contains SIO conforming char length in 7/6
+000886 04DC 7A               	LD A, D
+000887 04DD D9               	EXX
+000888 04DE                  
+000889 04DE E607             	AND 0x07        ; mask out baud rate fields
+000890 04E0 4F               	LD C, A         ; baud rate number into C
+000891 04E1                  
+000892 04E1 AF               	XOR A           ; clear B
+000893 04E2 47               	LD B,A
+000894 04E3 212F00           	LD HL, BAUDTB
+000895 04E6 09               	ADD HL, BC
+000896 04E7 5E               	LD E,(HL)       ; get CTC timer value for baudrate into E
+000897 04E8                  
+000898 04E8 4A               	LD C,D          ; recall port number
+000899 04E9 212300           	LD HL, CTCPTS
+000900 04EC 09               	ADD HL, BC
+000901 04ED 4E               	LD C, (HL)      ; get CTC port number into C
+000902 04EE                  
+000903 04EE 3E47             	LD A, 0x47      ; external clock: counter mode
+000904 04F0 ED79             	OUT (C), A      ; initialize CTC
+000905 04F2 ED59             	OUT (C), E      ; output timer value
+000906 04F4                  
+000907 04F4 4A               	LD C, D         ; reset interface status
+000908 04F5 210014           	LD HL, IST_A
+000909 04F8 09               	ADD HL, BC
+000910 04F9 3680             	LD (HL), 0x80   ; interface idle, no errors
+000911 04FB                  
+000912 04FB 42               	LD B, D         ; multiply port number * 6 and add to BUFDAT
+000913 04FC 04               	INC B
+000914 04FD DD210300         	LD IX, BUFDAT
+000915 0501 180C             	JR M3TST
+000916 0503 DD23             M3INC:  INC IX
+000917 0505 DD23             	INC IX
+000918 0507 DD23             	INC IX
+000919 0509 DD23             	INC IX
+000920 050B DD23             	INC IX
+000921 050D DD23             	INC IX
+000922 050F 10F2             M3TST:  DJNZ M3INC
+000923 0511                  
+000924 0511 0602             	LD B, 2          ; create 2 ring buffers 
+000925 0513 DD6E00           I2BUF:  LD L, (IX+0)
+000926 0516 DD6601           	LD H, (IX+1)
+000927 0519 DD7E02           	LD A, (IX+2)
+000928 051C CD8F07           	CALL CREATE
+000929 051F DD23             	INC IX
+000930 0521 DD23             	INC IX
+000931 0523 DD23             	INC IX
+000932 0525 10EC             	DJNZ I2BUF
+000933 0527                  	
+000934 0527                  	; now, initialize SIO channel
+000935 0527                  
+000936 0527 4A               	LD C,D          ; recall port number
+000937 0528 212700           	LD HL, SIOPTS
+000938 052B 09               	ADD HL, BC
+000939 052C 4E               	LD C, (HL)      ; get SIO port number into C
+000940 052D                  
+000941 052D 210E14           	LD HL, SIOPRM   ; set HL to area, where SIO parameters are assembled
+000942 0530 3630             	LD (HL), 0x30   ; error reset
+000943 0532 23               	INC HL
+000944 0533 3601             	LD (HL), 0x01   ; select register 1
+000945 0535 23               	INC HL
+000946 0536 3617             	LD (HL), 0x17   ; Int on all characters; parity,  status affects vec.
+000947 0538 23               	INC HL
+000948 0539 3602             	LD (HL), 0x02   ; select register 2
+000949 053B 23               	INC HL
+000950 053C 7A               	LD A,D          ; get channel number
+000951 053D                  	
+000952 053D D9               	EXX             ; get interrupt vector
+000953 053E 212B00           	LD HL, SIOVEC
+000954 0541 4F               	LD C,A
+000955 0542 AF               	XOR A
+000956 0543 47               	LD B,A
+000957 0544 09               	ADD HL, BC
+000958 0545 7E               	LD A,(HL)
+000959 0546 D9               	EXX
+000960 0547 77               	LD (HL),A
+000961 0548 23               	INC HL
+000962 0549                  	
+000963 0549 3603             	LD (HL), 0x03  ; select register 3 
+000964 054B 23               	INC HL
+000965 054C                  
+000966 054C D9               	EXX            ; character length from E'
+000967 054D 7B               	LD A,E
+000968 054E D9               	EXX
+000969 054F F601             	OR 0x01        ; enable receiver
+000970 0551 77               	LD (HL), A
+000971 0552 23               	INC HL
+000972 0553                  
+000973 0553 3604             	LD (HL), 0x04  ; select register 4
+000974 0555 23               	INC HL
+000975 0556                  
+000976 0556 D9               	EXX
+000977 0557 7A               	LD A,D  
+000978 0558 E698             	AND 0x98
+000979 055A 57               	LD D,A  
+000980 055B E608             	AND 0x08
+000981 055D 07               	RLCA    
+000982 055E 07               	RLCA    
+000983 055F B2               	OR D    
+000984 0560 D9               	EXX
+000985 0561 E6B0             	AND 0xB0
+000986 0563 07               	RLCA    
+000987 0564 07               	RLCA    
+000988 0565 07               	RLCA    
+000989 0566 07               	RLCA 
+000990 0567 F644             	OR 0x44       ; add x16 clock mode, stop bit qualifier
+000991 0569 77               	LD (HL),A
+000992 056A 23               	INC HL
+000993 056B                  
+000994 056B 3605             	LD (HL), 0x05 ; select register 5
+000995 056D 23               	INC HL
+000996 056E                  
+000997 056E D9               	EXX
+000998 056F 7B               	LD A,E
+000999 0570 D9               	EXX
+001000 0571                  
+001001 0571 0F               	RRCA
+001002 0572 F68A             	OR 0x8A
+001003 0574 77               	LD (HL), A
+001004 0575                  
+001005 0575 060B             	LD B,11
+001006 0577 210E14           	LD HL, SIOPRM
+001007 057A EDB3             	OTIR          ; finally: out to SIO
+001008 057C                  
+001009 057C C9               	RET
+001010 057D                  
+001011 057D                  	; 
+001012 057D                  	; MONITOR Program
+001013 057D                  	;
+001014 057D                  
+001015 057D                  PRAC:   ; A in 2 digits ausgeben
+001016 057D F5               	PUSH AF
+001017 057E 1F               	RRA
+001018 057F 1F               	RRA
+001019 0580 1F               	RRA
+001020 0581 1F               	RRA
+001021 0582 CD8605           	CALL OUTH
+001022 0585 F1               	POP AF
+001023 0586                  
+001024 0586 E60F             OUTH:   AND 0x0F
+001025 0588 C630             	ADD A, '0'
+001026 058A FE3A             	CP '9'+1
+001027 058C 3802             	JR C, OUTCH
+001028 058E C607             	ADD A, 'A'-'9'-1
+001029 0590 4F               OUTCH:  LD C, A
+001030 0591 C3E209           	JP CO_C
+001031 0594                  
+001032 0594                  PRHL:   ; HL in 4 digits ausgeben
+001033 0594 7C               	LD A, H
+001034 0595 CD7D05           	CALL PRAC
+001035 0598 7D               	LD A, L
+001036 0599 18E2             	JR PRAC
+001037 059B                  
+001038 059B                  EXPR:   ; Hexzahl in HL eingeben, Terminator in A speichern
+001039 059B 210000           	LD HL, 0x000
+001040 059E CDCF09           EX0:    CALL CI_C
+001041 05A1 CD9005           	CALL OUTCH
+001042 05A4 CDB105           EX1:    CALL NIBBLE
+001043 05A7 3818             	JR C, EX2
+001044 05A9 29               	ADD HL, HL
+001045 05AA 29               	ADD HL, HL
+001046 05AB 29               	ADD HL, HL
+001047 05AC 29               	ADD HL, HL
+001048 05AD B5               	OR L
+001049 05AE 6F               	LD L, A
+001050 05AF 18ED             	JR EX0
+001051 05B1 D630             NIBBLE: SUB '0'
+001052 05B3 D8               	RET C
+001053 05B4 FE17             	CP 'G'-'0'
+001054 05B6 3F               	CCF
+001055 05B7 D8               	RET C
+001056 05B8 FE0A             	CP 10
+001057 05BA 3F               	CCF
+001058 05BB D0               	RET NC
+001059 05BC D607             	SUB 'A'-'9'-1
+001060 05BE FE0A             	CP 10
+001061 05C0 C9               	RET
+001062 05C1 79               EX2:    LD A, C
+001063 05C2 FE0D             	CP '\r'
+001064 05C4 2801             	JR Z, ECHU
+001065 05C6 C9               	RET
+001066 05C7 F5               ECHU:   PUSH AF
+001067 05C8 0E0A             	LD C, '\n'
+001068 05CA CDE209           	CALL CO_C
+001069 05CD F1               	POP AF
+001070 05CE 4F               	LD C, A
+001071 05CF C9               	RET
+001072 05D0                  
+001073 05D0 0E0D             CRLF:   LD C, '\r'
+001074 05D2 CDE209           	CALL CO_C
+001075 05D5 0E0A             	LD C, '\n'
+001076 05D7 C3E209           	JP CO_C
+001077 05DA                  
+001078 05DA 7E               LPRINT: LD A, (HL)
+001079 05DB 23               	INC HL
+001080 05DC B7               	OR A
+001081 05DD C8               	RET Z
+001082 05DE CD9005           	CALL OUTCH
+001083 05E1 18F7             	JR LPRINT
+001084 05E3                  
+001085 05E3 0600             LENGTH: LD B, 0
+001086 05E5 E5               	PUSH HL
+001087 05E6 D1               	POP DE
+001088 05E7 7E               	LD A, (HL)
+001089 05E8 E6DF             	AND 0xDF
+001090 05EA FEDD             	CP 0xDD
+001091 05EC 2858             	JR Z, TAB5
+001092 05EE 7E               	LD A, (HL)
+001093 05EF FECB             	CP 0xCB
+001094 05F1 2845             	JR Z, B2
+001095 05F3 FEED             	CP 0xED
+001096 05F5 2845             	JR Z, TAB2
+001097 05F7 FEC3             	CP 0xC3
+001098 05F9 283C             	JR Z, B3
+001099 05FB FECD             	CP 0xCD
+001100 05FD 2838             	JR Z, B3
+001101 05FF E6EF             	AND 0xEF
+001102 0601 FE22             	CP 0x22
+001103 0603 2832             	JR Z, B3
+001104 0605 FE2A             	CP 0x2A
+001105 0607 282E             	JR Z, B3
+001106 0609 E6CF             	AND 0xCF
+001107 060B FE01             	CP 1
+001108 060D 2828             	JR Z, B3
+001109 060F E6C7             	AND 0xC7
+001110 0611 FEC2             	CP 0xC2
+001111 0613 2822             	JR Z, B3
+001112 0615 FEC4             	CP 0xC4
+001113 0617 281E             	JR Z, B3
+001114 0619 7E               	LD A, (HL)
+001115 061A E6F7             	AND 0xF7
+001116 061C FE10             	CP 0x10
+001117 061E 2818             	JR Z, B2
+001118 0620 FED3             	CP 0xD3
+001119 0622 2814             	JR Z, B2
+001120 0624 E6E7             	AND 0xE7
+001121 0626 FE20             	CP 0x20
+001122 0628 280E             	JR Z, B2
+001123 062A E6C7             	AND 0xC7
+001124 062C FE06             	CP 6
+001125 062E 2808             	JR Z, B2
+001126 0630 FEC6             	CP 0xC6
+001127 0632 2804             	JR Z, B2
+001128 0634 1803             	JR B1
+001129 0636                  
+001130 0636 04               B4:     INC B
+001131 0637 04               B3:     INC B
+001132 0638 04               B2:     INC B
+001133 0639 04               B1:     INC B
+001134 063A EB               	EX DE, HL
+001135 063B C9               	RET
+001136 063C                  
+001137 063C 23               TAB2:   INC HL
+001138 063D 7E               	LD A, (HL)
+001139 063E E6C7             	AND 0xC7
+001140 0640 FE43             	CP 0x43
+001141 0642 28F2             	JR Z, B4
+001142 0644 18F2             	JR B2
+001143 0646                  
+001144 0646 23               TAB5:   INC HL
+001145 0647 7E               	LD A, (HL)
+001146 0648 FECB             	CP 0xCB
+001147 064A 28EA             	JR Z, B4
+001148 064C FE21             	CP 0x21
+001149 064E 28E6             	JR Z, B4
+001150 0650 E6FE             	AND 0xFE
+001151 0652 FE34             	CP 0x34
+001152 0654 28E1             	JR Z, B3
+001153 0656 E6FB             	AND 0xFB
+001154 0658 FE70             	CP 0x70
+001155 065A 28DB             	JR Z, B3
+001156 065C 7E               	LD A, (HL)
+001157 065D E6CF             	AND 0xCF
+001158 065F FE06             	CP 6
+001159 0661 28D3             	JR Z, B4
+001160 0663 E6C7             	AND 0xC7
+001161 0665 FE02             	CP 2
+001162 0667 28CD             	JR Z, B4
+001163 0669 7E               	LD A, (HL)
+001164 066A D640             	SUB 0x40
+001165 066C E687             	AND 0x87
+001166 066E FE06             	CP 6
+001167 0670 28C5             	JR Z, B3
+001168 0672 18C4             	JR B2
+001169 0674                  
+001170 0674                  MSTART:
+001171 0674 CDD005           MLOOP:  CALL CRLF
+001172 0677 217F06           	LD HL, STRG1
+001173 067A CDDA05           	CALL LPRINT
+001174 067D 1805             	JR LBL1
+001175 067F 5359533E00       STRG1:  .db "SYS>\0"
+001176 0684 CDCF09           LBL1:   CALL CI_C   
+001177 0687 4F               	LD C, A
+001178 0688 CDE209           	CALL CO_C
+001179 068B FE45             	CP 'E'
+001180 068D 2847             	JR Z, ENTER
+001181 068F FE47             	CP 'G'
+001182 0691 280B             	JR Z, GOEX
+001183 0693 FE51             	CP 'Q'
+001184 0695 2810             	JR Z, QUERY
+001185 0697 FE58             	CP 'X'
+001186 0699 CAE903           	JP Z, ESCAPE
+001187 069C 18D6             	JR MLOOP
+001188 069E                  
+001189 069E CD9B05           GOEX:   CALL EXPR
+001190 06A1 117406           	LD DE, MLOOP
+001191 06A4 D5               	PUSH DE
+001192 06A5 E5               	PUSH HL
+001193 06A6 C9               	RET
+001194 06A7                  
+001195 06A7 CDCF09           QUERY:  CALL CI_C
+001196 06AA CD9005           	CALL OUTCH
+001197 06AD FE49             	CP 'I'
+001198 06AF 2814             	JR Z, INPQ
+001199 06B1 CD9B05           	CALL EXPR
+001200 06B4 4D               	LD C, L
+001201 06B5 FE20             	CP ' ' 
+001202 06B7 C27406           	JP NZ, MLOOP
+001203 06BA C5               	PUSH BC
+001204 06BB CD9B05           	CALL EXPR
+001205 06BE C1               	POP BC
+001206 06BF 7D               	LD A, L
+001207 06C0 ED79             	OUT (C), A
+001208 06C2 C37406           	JP MLOOP
+001209 06C5 CD9B05           INPQ:   CALL EXPR
+001210 06C8 0E20             	LD C, ' '
+001211 06CA CDE209           	CALL CO_C
+001212 06CD 4D               	LD C, L
+001213 06CE ED78             	IN A, (C)
+001214 06D0 CD7D05           	CALL PRAC
+001215 06D3 C37406           	JP MLOOP
+001216 06D6                  
+001217 06D6 CD9B05           ENTER:  CALL EXPR
+001218 06D9 CDD005           LOOP:   CALL CRLF
+001219 06DC CD9405           LOOPA:  CALL PRHL
+001220 06DF CDE305           	CALL LENGTH
+001221 06E2 C5               	PUSH BC
+001222 06E3 E5               	PUSH HL
+001223 06E4 0E20             LOOP1:  LD C, ' '
+001224 06E6 CDE209           	CALL CO_C
+001225 06E9 7E               	LD A, (HL)
+001226 06EA CD7D05           	CALL PRAC
+001227 06ED 23               	INC HL
+001228 06EE 10F4             	DJNZ LOOP1
+001229 06F0                  
+001230 06F0 D1               	POP DE
+001231 06F1 C1               	POP BC
+001232 06F2 3E05             	LD A, 5
+001233 06F4 90               	SUB B
+001234 06F5 47               	LD B, A
+001235 06F6 07               	RLCA
+001236 06F7 E60F             	AND 0x0F
+001237 06F9 80               	ADD A, B
+001238 06FA 47               	LD B, A
+001239 06FB 0E20             LPP:    LD C, ' '
+001240 06FD CDE209           	CALL CO_C
+001241 0700 10F9             	DJNZ LPP
+001242 0702 0E3A             	LD C, ':'
+001243 0704 CDE209           	CALL CO_C
+001244 0707 1A               	LD A, (DE)
+001245 0708 E67F             	AND 0x7F
+001246 070A FE20             	CP 0x20
+001247 070C 3807             	JR C, CONT
+001248 070E FE7F             	CP 0x7F
+001249 0710 2803             	JR Z, CONT
+001250 0712 4F               	LD C, A
+001251 0713 1802             	JR CONT1
+001252 0715 0E20             CONT:   LD C, ' ' 
+001253 0717 CDE209           CONT1:  CALL CO_C
+001254 071A 0E3A             	LD C, ':'
+001255 071C CDE209           	CALL CO_C
+001256 071F CDCF09           LOOP2:  CALL CI_C
+001257 0722 4F               	LD C, A
+001258 0723 CDE209           	CALL CO_C
+001259 0726 FE7F             LOOP3:  CP 0x7F
+001260 0728 CA5207           	JP Z, BACKGO
+001261 072B FE0D             	CP '\r'
+001262 072D CA5707           	JP Z, LPPA
+001263 0730 FE20             	CP ' '
+001264 0732 CAD906           	JP Z, LOOP
+001265 0735 FE2E             	CP '.'
+001266 0737 CA7406           	JP Z, MLOOP
+001267 073A FE27             	CP '\''
+001268 073C CA5C07           	JP Z, TEXT
+001269 073F 210000           LOOP4:  LD HL, 0x0000
+001270 0742 CDA405           	CALL EX1
+001271 0745 47               	LD B, A
+001272 0746 7D               	LD A, L
+001273 0747 12               	LD (DE), A
+001274 0748 13               	INC DE
+001275 0749 78               	LD A, B
+001276 074A FE20             	CP ' ' 
+001277 074C 28D1             	JR Z, LOOP2
+001278 074E EB               	EX DE, HL
+001279 074F C3DC06           	JP LOOPA
+001280 0752 1B               BACKGO: DEC DE
+001281 0753 EB               	EX DE, HL
+001282 0754 C3D906           	JP LOOP
+001283 0757 EB               LPPA:   EX DE, HL
+001284 0758 23               	INC HL
+001285 0759 C3D906           	JP LOOP
+001286 075C CDCF09           TEXT:   CALL CI_C
+001287 075F CD9005           	CALL OUTCH
+001288 0762 FE27             	CP '\''
+001289 0764 2808             	JR Z, CONTE
+001290 0766 FE7F             	CP 0x7F
+001291 0768 2813             	JR Z, BACK
+001292 076A 12               	LD (DE), A
+001293 076B 13               	INC DE
+001294 076C 18EE             	JR TEXT
+001295 076E CDCF09           CONTE:  CALL CI_C
+001296 0771 CD9005           	CALL OUTCH
+001297 0774 FE20             	CP ' '
+001298 0776 CA1F07           	JP Z, LOOP2
+001299 0779 EB               	EX DE, HL
+001300 077A C3D906           	JP LOOP
+001301 077D 0E08             BACK:   LD C, 8
+001302 077F CDE209           	CALL CO_C
+001303 0782 0E20             	LD C, ' '
+001304 0784 CDE209           	CALL CO_C
+001305 0787 0E08             	LD C, 8
+001306 0789 CDE209           	CALL CO_C
+001307 078C 1B               	DEC DE
+001308 078D 18CD             	JR TEXT
+001309 078F                  
+001310 078F                  CREATE:         ; HL points to a buffer, A contains the
+001311 078F                  		; maxleng value. The buffer is initialized
+001312 078F                  		; to be empty. AF is destroyed, HL lost.
+001313 078F                  
+001314 078F 77               	LD (HL),A       ; maxleng := A
+001315 0790 23               	INC HL
+001316 0791 AF               	XOR A
+001317 0792 77               	LD (HL),A       ; bytesin := 0
+001318 0793 23               	INC HL
+001319 0794 77               	LD (HL),A       ; getind := 0
+001320 0795 23               	INC HL
+001321 0796 77               	LD (HL),A       ; putind := 0
+001322 0797 2B               	DEC HL
+001323 0798 2B               	DEC HL
+001324 0799 2B               	DEC HL
+001325 079A C9               	RET
+001326 079B                  
+001327 079B                  
+001328 079B                  EMPTY:          ; HL points to a buffer. If the buffer is
+001329 079B                  		; empty, the zero flag is set, else it is
+001330 079B                  		; reset. A is destroyed, HL saved.
+001331 079B 23               	INC HL
+001332 079C 7E               	LD A,(HL)
+001333 079D 2B               	DEC HL
+001334 079E B7               	OR A
+001335 079F C9               	RET
+001336 07A0                  
+001337 07A0                  
+001338 07A0                  FULL:           ; HL points to a buffer. If the buffer is
+001339 07A0                  		; full, the zero flag is set, else it is
+001340 07A0                  		; reset. A is destroyed, HL saved.
+001341 07A0 23               	INC HL
+001342 07A1 7E               	LD A,(HL)
+001343 07A2 2B               	DEC HL
+001344 07A3 BE               	CP (HL)
+001345 07A4 C9               	RET
+001346 07A5                  
+001347 07A5                  
+001348 07A5                  GET:            ; HL points to a buffer. The next character
+001349 07A5                  		; is read from this buffer and returned in A
+001350 07A5                  		; IX destroyed. This function
+001351 07A5                  		; is defined only if the buffer is not empty
+001352 07A5 D5               	PUSH DE
+001353 07A6 DDE5             	PUSH IX
+001354 07A8 1600             	LD D,0
+001355 07AA                  
+001356 07AA E5               	PUSH HL
+001357 07AB DDE1             	POP IX
+001358 07AD                  
+001359 07AD DD3501           	DEC (IX+1)
+001360 07B0 DD7E02           	LD A,(IX+2)     ; bytesin := bytesin +1
+001361 07B3 3C               	INC A
+001362 07B4 DDBE00           	CP (IX+0)
+001363 07B7 FAC007           	JP M,NRMLG
+001364 07BA DD360200         	LD (IX+2),0
+001365 07BE 1803             	JR CMNG
+001366 07C0 DD7702           NRMLG:  LD (IX+2),A
+001367 07C3 5F               CMNG:   LD E,A
+001368 07C4 DD19             	ADD IX,DE
+001369 07C6 DD7E03           	LD A,(IX+3)
+001370 07C9                  	
+001371 07C9 DDE1             	POP IX
+001372 07CB D1               	POP DE
+001373 07CC C9               	RET
+001374 07CD                  
+001375 07CD                  
+001376 07CD                  PUT:            ; HL points to a buffer. The character passed
+001377 07CD                  		; in A is put to this buffer. HL is kept,
+001378 07CD                  		; IX lost. This function is defined only
+001379 07CD                  		; if the buffer is not full
+001380 07CD                  	
+001381 07CD D5               	PUSH DE
+001382 07CE DDE5             	PUSH IX
+001383 07D0 F5               	PUSH AF
+001384 07D1 1600             	LD D,0
+001385 07D3 E5               	PUSH HL
+001386 07D4 DDE1             	POP IX
+001387 07D6                  
+001388 07D6 DD3401           	INC (IX+1)
+001389 07D9 DD7E03           	LD A,(IX+3)
+001390 07DC 3C               	INC A
+001391 07DD DDBE00           	CP (IX+0)
+001392 07E0 FAE907           	JP M, NRMLP
+001393 07E3 DD360300         	LD (IX+3),0
+001394 07E7 1803             	JR CMNP
+001395 07E9 DD7703           NRMLP:  LD (IX+3),A
+001396 07EC 5F               CMNP:   LD E,A
+001397 07ED F1               	POP AF
+001398 07EE DD19             	ADD IX,DE
+001399 07F0 DD7703           	LD (IX+3),A
+001400 07F3 DDE1             	POP IX
+001401 07F5 D1               	POP DE
+001402 07F6 C9               	RET
+001403 07F7                  
+001404 07F7                  ; --------------------- per port routines start A--------
+001405 07F7                  INTWR_A:
+001406 07F7 F5               	PUSH AF
+001407 07F8 E5               	PUSH HL
+001408 07F9 214015           	LD HL, OBUF_A
+001409 07FC CD9B07           	CALL EMPTY
+001410 07FF 280A             	JR Z, EMPA
+001411 0801                  
+001412 0801 CDA507           NOHDWA: CALL GET
+001413 0804 D3F4             	OUT (S1AD),A
+001414 0806 E1               RETRNA: POP HL
+001415 0807 F1               	POP AF
+001416 0808 FB               	EI
+001417 0809 ED4D             	RETI
+001418 080B 210014           EMPA:   LD HL, IST_A
+001419 080E CBFE             	SET 7,(HL)
+001420 0810 3E28             	LD A,0x28       ; reset pending interrupt
+001421 0812 D3F5             	OUT (S1AC),A
+001422 0814 18F0  H           	JR RETRNA
+001423 0816                  
+001424 0816                  
+001425 0816                  INTRD_A:
+001426 0816 F5               	PUSH AF
+001427 0817 E5               	PUSH HL
+001428 0818 210015           	LD HL, IBUF_A
+001429 081B CDA007           	CALL FULL
+001430 081E DBF4             	IN A,(S1AD)
+001431 0820 2807             	JR Z, FULA
+001432 0822 E67F             	AND 0x7F        ; 7 bit world
+001433 0824 CDCD07           	CALL PUT
+001434 0827 18DD             	JR RETRNA
+001435 0829 210014           FULA:   LD HL, IST_A
+001436 082C 7E               	LD A,(HL)
+001437 082D F620             	OR 0x20         ; overflow bit
+001438 082F 77               	LD (HL),A
+001439 0830 18D4             	JR RETRNA
+001440 0832                  
+001441 0832                  
+001442 0832                  INTER_A:
+001443 0832 F5               	PUSH AF
+001444 0833 E5               	PUSH HL
+001445 0834 3E01             	LD A,1
+001446 0836 D3F5             	OUT (S1AC),A
+001447 0838 DBF5             	IN A,(S1AC)
+001448 083A E630             	AND 0x30
+001449 083C 210014           	LD HL, IST_A
+001450 083F B6               	OR (HL)
+001451 0840 77               	LD (HL),A
+001452 0841 DBF4             	IN A, (S1AD)
+001453 0843 3E30             	LD A,0x30
+001454 0845 D3F5             	OUT (S1AC),A
+001455 0847 18BD             	JR RETRNA
+001456 0849                  
+001457 0849                  
+001458 0849                  INTST_A:                 ; external status change
+001459 0849 F5               	PUSH AF
+001460 084A E5               	PUSH HL
+001461 084B 210014           	LD HL, IST_A
+001462 084E 7E               	LD A,(HL)
+001463 084F E6F5             	AND 0xF5        ; mask away CTS and DCD
+001464 0851 77               	LD (HL),A
+001465 0852 AF               	XOR A           ; get status
+001466 0853 D3F5             	OUT (S1AC),A
+001467 0855 DBF5             	IN A,(S1AC)
+001468 0857 E628             	AND 0x28        ; mask CTS and DCD bits
+001469 0859 1F               	RRA
+001470 085A 1F               	RRA
+001471 085B B6               	OR (HL)
+001472 085C 77               	LD (HL),A
+001473 085D 3E10             	LD A,0x10       ; reset status
+001474 085F D3F5             	OUT (S1AC),A
+001475 0861 18A3             	JR RETRNA                       
+001476 0863                  
+001477 0863                  CI_A:
+001478 0863 E5               	PUSH HL
+001479 0864 210015           	LD HL, IBUF_A
+001480 0867 1801             	JR TEST1A
+001481 0869 76               WAIT1A: HALT
+001482 086A CD9B07           TEST1A: CALL EMPTY
+001483 086D 28FA             	JR Z, WAIT1A
+001484 086F F3               	DI
+001485 0870 CDA507           	CALL GET
+001486 0873 FB               	EI
+001487 0874 E1               	POP HL
+001488 0875 C9               	RET
+001489 0876                  
+001490 0876 E5               CO_A:   PUSH HL
+001491 0877 214015           	LD HL, OBUF_A
+001492 087A 1801             	JR TEST2A
+001493 087C 76               WAIT2A: HALT
+001494 087D F3               TEST2A: DI
+001495 087E CDA007           	CALL FULL
+001496 0881 FB               	EI
+001497 0882 28F8             	JR Z, WAIT2A
+001498 0884 3A0014           	LD A, (IST_A)
+001499 0887 CB7F             	BIT 7,A
+001500 0889 280A             	JR Z, ENDA
+001501 088B CBBF             	RES 7,A
+001502 088D 320014           	LD (IST_A),A
+001503 0890 79               	LD A,C
+001504 0891 D3F4             	OUT (S1AD),A
+001505 0893 E1               	POP HL
+001506 0894 C9               	RET
+001507 0895 79               ENDA:   LD A,C
+001508 0896 F3               	DI
+001509 0897 CDCD07           	CALL PUT
+001510 089A FB               	EI
+001511 089B E1               	POP HL
+001512 089C C9               	RET
+001513 089D                   
+001514 089D                  CSTS_A:
+001515 089D E5               	PUSH HL
+001516 089E 210015           	LD HL, IBUF_A
+001517 08A1 CD9B07           	CALL EMPTY
+001518 08A4 E1               	POP HL
+001519 08A5 2002             	JR NZ, CDRESA
+001520 08A7 AF               	XOR A
+001521 08A8 C9               	RET
+001522 08A9 3EFF             CDRESA: LD A, 0xFF
+001523 08AB B7               	OR A
+001524 08AC C9               	RET 
+001525 08AD                  ; --------------------- per port routines end A--------
+001526 08AD                  
+001527 08AD                  ; --------------------- per port routines start B--------
+001528 08AD                  INTWR_B:
+001529 08AD F5               	PUSH AF
+001530 08AE E5               	PUSH HL
+001531 08AF 21C015           	LD HL, OBUF_B
+001532 08B2 CD9B07           	CALL EMPTY
+001533 08B5 280A             	JR Z, EMPB
+001534 08B7                  	
+001535 08B7 CDA507           NOHDWB: CALL GET
+001536 08BA D3F6             	OUT (S1BD),A
+001537 08BC E1               RETRNB: POP HL
+001538 08BD F1               	POP AF
+001539 08BE FB               	EI
+001540 08BF ED4D             	RETI
+001541 08C1 210114           EMPB:   LD HL, IST_B
+001542 08C4 CBFE             	SET 7,(HL)
+001543 08C6 3E28             	LD A,0x28       ; reset pending interrupt
+001544 08C8 D3F7             	OUT (S1BC),A
+001545 08CA 18F0             	JR RETRNB
+001546 08CC                  
+001547 08CC                  
+001548 08CC                  INTRD_B:
+001549 08CC F5               	PUSH AF
+001550 08CD E5               	PUSH HL
+001551 08CE 218015           	LD HL, IBUF_B
+001552 08D1 CDA007           	CALL FULL
+001553 08D4 DBF6             	IN A,(S1BD)
+001554 08D6 2807             	JR Z, FULB
+001555 08D8 E67F             	AND 0x7F        ; 7 bit world
+001556 08DA CDCD07           	CALL PUT
+001557 08DD 18DD             	JR RETRNB
+001558 08DF 210114           FULB:   LD HL, IST_B
+001559 08E2 7E               	LD A,(HL)
+001560 08E3 F620             	OR 0x20         ; overflow bit
+001561 08E5 77               	LD (HL),A
+001562 08E6 18D4             	JR RETRNB
+001563 08E8                  
+001564 08E8                  
+001565 08E8                  INTER_B:
+001566 08E8 F5               	PUSH AF
+001567 08E9 E5               	PUSH HL
+001568 08EA 3E01             	LD A,1
+001569 08EC D3F7             	OUT (S1BC),A
+001570 08EE DBF7             	IN A,(S1BC)
+001571 08F0 E630             	AND 0x30
+001572 08F2 210114           	LD HL, IST_B
+001573 08F5 B6               	OR (HL)
+001574 08F6 77               	LD (HL),A
+001575 08F7 DBF6             	IN A, (S1BD)
+001576 08F9 3E30             	LD A,0x30
+001577 08FB D3F7             	OUT (S1BC),A
+001578 08FD 18BD             	JR RETRNB
+001579 08FF                  
+001580 08FF                  
+001581 08FF                  INTST_B:                 ; external status change
+001582 08FF F5               	PUSH AF
+001583 0900 E5               	PUSH HL
+001584 0901 210114           	LD HL, IST_B
+001585 0904 7E               	LD A,(HL)
+001586 0905 E6F5             	AND 0xF5        ; mask away CTS and DCD
+001587 0907 77               	LD (HL),A
+001588 0908 AF               	XOR A           ; get status
+001589 0909 D3F7             	OUT (S1BC),A 
+001590 090B DBF7             	IN A,(S1BC)
+001591 090D E628             	AND 0x28        ; mask CTS and DCD bits
+001592 090F 1F               	RRA
+001593 0910 1F               	RRA
+001594 0911 B6               	OR (HL)
+001595 0912 77               	LD (HL),A
+001596 0913 3E10             	LD A, 0x10      ; reset status
+001597 0915 D3F7             	OUT (S1BC),A
+001598 0917 18A3             	JR RETRNB                       
+001599 0919                  
+001600 0919                  CI_B:
+001601 0919 E5               	PUSH HL
+001602 091A 218015           	LD HL, IBUF_B
+001603 091D 1801             	JR TEST1B
+001604 091F 76               WAIT1B: HALT
+001605 0920 CD9B07           TEST1B: CALL EMPTY
+001606 0923 28FA             	JR Z, WAIT1B
+001607 0925 F3               	DI
+001608 0926 CDA507           	CALL GET
+001609 0929 FB               	EI
+001610 092A E1               	POP HL
+001611 092B C9               	RET
+001612 092C                  
+001613 092C E5               CO_B:   PUSH HL
+001614 092D 21C015           	LD HL, OBUF_B
+001615 0930 1801             	JR TEST2B
+001616 0932 76               WAIT2B: HALT
+001617 0933 F3               TEST2B: DI
+001618 0934 CDA007           	CALL FULL
+001619 0937 FB               	EI
+001620 0938 28F8             	JR Z, WAIT2B
+001621 093A 3A0114           	LD A,(IST_B)
+001622 093D CB7F             	BIT 7,A
+001623 093F 280A             	JR Z, ENDB
+001624 0941 CBBF             	RES 7,A
+001625 0943 320114           	LD (IST_B),A
+001626 0946 79               	LD A,C
+001627 0947 D3F6             	OUT (S1BD),A
+001628 0949 E1               	POP HL
+001629 094A C9               	RET
+001630 094B 79               ENDB:   LD A,C
+001631 094C F3               	DI
+001632 094D CDCD07           	CALL PUT
+001633 0950 FB               	EI
+001634 0951 E1               	POP HL
+001635 0952 C9               	RET
+001636 0953                   
+001637 0953                  CSTS_B:
+001638 0953 E5               	PUSH HL
+001639 0954 218015           	LD HL, IBUF_B
+001640 0957 CD9B07           	CALL EMPTY
+001641 095A E1               	POP HL
+001642 095B 2002             	JR NZ, CDRESB
+001643 095D AF               	XOR A
+001644 095E C9               	RET
+001645 095F 3EFF             CDRESB: LD A, 0xFF
+001646 0961 B7               	OR A
+001647 0962 C9               	RET 
+001648 0963                  ; --------------------- per port routines end B--------
+001649 0963                  
+001650 0963                  ; --------------------- per port routines start C--------
+001651 0963                  INTWR_C:
+001652 0963 F5               	PUSH AF
+001653 0964 E5               	PUSH HL
+001654 0965 214016           	LD HL, OBUF_C
+001655 0968 CD9B07           	CALL EMPTY
+001656 096B 280A             	JR Z, EMPC
+001657 096D                  	
+001658 096D CDA507           NOHDWC: CALL GET
+001659 0970 D3EC             	OUT (S2CD),A
+001660 0972 E1               RETRNC: POP HL
+001661 0973 F1               	POP AF
+001662 0974 FB               	EI
+001663 0975 ED4D             	RETI
+001664 0977 210214           EMPC:   LD HL, IST_C
+001665 097A CBFE             	SET 7,(HL)
+001666 097C 3E28             	LD A,0x28       ; reset pending interrupt
+001667 097E D3ED             	OUT (S2CC),A
+001668 0980 18F0             	JR RETRNC
+001669 0982                  
+001670 0982                  
+001671 0982                  INTRD_C:
+001672 0982 F5               	PUSH AF
+001673 0983 E5               	PUSH HL
+001674 0984 210016           	LD HL, IBUF_C
+001675 0987 CDA007           	CALL FULL
+001676 098A DBEC             	IN A,(S2CD)
+001677 098C 2807             	JR Z, FULC
+001678 098E E67F             	AND 0x7F        ; 7 bit
+001679 0990 CDCD07           	CALL PUT
+001680 0993 18DD             	JR RETRNC
+001681 0995 210214           FULC:   LD HL, IST_C
+001682 0998 7E               	LD A,(HL)
+001683 0999 F620             	OR 0x20         ; overflow bit
+001684 099B 77               	LD (HL),A
+001685 099C 18D4             	JR RETRNC
+001686 099E                  
+001687 099E                  
+001688 099E                  INTER_C:
+001689 099E F5               	PUSH AF
+001690 099F E5               	PUSH HL
+001691 09A0 3E01             	LD A,1
+001692 09A2 D3ED             	OUT (S2CC),A
+001693 09A4 DBED             	IN A,(S2CC)
+001694 09A6 E630             	AND 0x30
+001695 09A8 210214           	LD HL, IST_C
+001696 09AB B6               	OR (HL)
+001697 09AC 77               	LD (HL),A
+001698 09AD DBEC             	IN A, (S2CD)
+001699 09AF 3E30             	LD A,0x30
+001700 09B1 D3ED             	OUT (S2CC),A
+001701 09B3 18BD             	JR RETRNC
+001702 09B5                  
+001703 09B5                  
+001704 09B5                  INTST_C:                 ; external status change
+001705 09B5 F5               	PUSH AF
+001706 09B6 E5               	PUSH HL
+001707 09B7 210214           	LD HL, IST_C
+001708 09BA 7E               	LD A,(HL)
+001709 09BB E6F5             	AND 0xF5        ; mask away CTS and DCD
+001710 09BD 77               	LD (HL),A
+001711 09BE AF               	XOR A           ; get status
+001712 09BF D3ED             	OUT (S2CC),A
+001713 09C1 DBED             	IN A,(S2CC)
+001714 09C3 E628             	AND 0x28        ; mask CTS and DCD bits
+001715 09C5 1F               	RRA
+001716 09C6 1F               	RRA
+001717 09C7 B6               	OR (HL)
+001718 09C8 77               	LD (HL),A
+001719 09C9 3E10             	LD A, 0x10      ; reset status
+001720 09CB D3ED             	OUT (S2CC),A
+001721 09CD 18A3             	JR RETRNC
+001722 09CF                  
+001723 09CF                  
+001724 09CF                  CI_C:
+001725 09CF E5               	PUSH HL
+001726 09D0 210016           	LD HL, IBUF_C
+001727 09D3 1801             	JR TEST1C
+001728 09D5 76               WAIT1C: HALT
+001729 09D6 CD9B07           TEST1C: CALL EMPTY
+001730 09D9 28FA             	JR Z, WAIT1C
+001731 09DB F3               	DI
+001732 09DC CDA507           	CALL GET
+001733 09DF FB               	EI
+001734 09E0 E1               	POP HL
+001735 09E1 C9               	RET
+001736 09E2                  
+001737 09E2 E5               CO_C:   PUSH HL
+001738 09E3 214016           	LD HL, OBUF_C
+001739 09E6 1801             	JR TEST2C
+001740 09E8 76               WAIT2C: HALT
+001741 09E9 F3               TEST2C: DI
+001742 09EA CDA007           	CALL FULL
+001743 09ED FB               	EI
+001744 09EE 28F8             	JR Z, WAIT2C
+001745 09F0 3A0214           	LD A,(IST_C)
+001746 09F3 CB7F             	BIT 7,A
+001747 09F5 280A             	JR Z, ENDC
+001748 09F7 CBBF             	RES 7,A
+001749 09F9 320214           	LD (IST_C),A
+001750 09FC 79               	LD A,C
+001751 09FD D3EC             	OUT (S2CD), A
+001752 09FF E1               	POP HL
+001753 0A00 C9               	RET
+001754 0A01 79               ENDC:   LD A,C
+001755 0A02 F3               	DI
+001756 0A03 CDCD07           	CALL PUT
+001757 0A06 FB               	EI
+001758 0A07 E1               	POP HL
+001759 0A08 C9               	RET
+001760 0A09                  
+001761 0A09                  CSTS_C:
+001762 0A09 E5               	PUSH HL
+001763 0A0A 210016           	LD HL, IBUF_C
+001764 0A0D CD9B07           	CALL EMPTY
+001765 0A10 E1               	POP HL
+001766 0A11 2002             	JR NZ, CDRESC
+001767 0A13 AF               	XOR A
+001768 0A14 C9               	RET
+001769 0A15 3EFF             CDRESC: LD A, 0xFF
+001770 0A17 B7               	OR A
+001771 0A18 C9               	RET 
+001772 0A19                  ; --------------------- per port routines end C--------
+001773 0A19                  
+001774 0A19                  
+001775 0A19                  ; --------------------- per port routines start D--------
+001776 0A19                  INTWR_D:
+001777 0A19 F5               	PUSH AF
+001778 0A1A E5               	PUSH HL
+001779 0A1B 21C016           	LD HL, OBUF_D
+001780 0A1E CD9B07           	CALL EMPTY
+001781 0A21 280A             	JR Z, EMPD
+001782 0A23                  	
+001783 0A23 CDA507           NOHDWD: CALL GET
+001784 0A26 D3EE             	OUT (S2DD),A
+001785 0A28 E1               RETRND: POP HL
+001786 0A29 F1               	POP AF
+001787 0A2A FB               	EI
+001788 0A2B ED4D             	RETI
+001789 0A2D 210314           EMPD:   LD HL, IST_D
+001790 0A30 CBFE             	SET 7,(HL)
+001791 0A32 3E28             	LD A,0x28       ; reset pending interrupt
+001792 0A34 D3EF             	OUT (S2DC),A
+001793 0A36 18F0             	JR RETRND
+001794 0A38                  
+001795 0A38                  
+001796 0A38                  INTRD_D:
+001797 0A38 F5               	PUSH AF
+001798 0A39 E5               	PUSH HL
+001799 0A3A 218016           	LD HL, IBUF_D
+001800 0A3D CDA007           	CALL FULL
+001801 0A40 DBEE             	IN A,(S2DD)
+001802 0A42 2807             	JR Z, FULD
+001803 0A44 E67F             	AND 0x7F        ; 7 bit
+001804 0A46 CDCD07           	CALL PUT
+001805 0A49 18DD             	JR RETRND
+001806 0A4B 210314           FULD:   LD HL, IST_D
+001807 0A4E 7E               	LD A,(HL)
+001808 0A4F F620             	OR 0x20         ; overflow bit
+001809 0A51 77               	LD (HL),A
+001810 0A52 18D4             	JR RETRND
+001811 0A54                  
+001812 0A54                  
+001813 0A54                  INTER_D:
+001814 0A54 F5               	PUSH AF
+001815 0A55 E5               	PUSH HL
+001816 0A56 3E01             	LD A,1
+001817 0A58 D3EF             	OUT (S2DC),A
+001818 0A5A DBEF             	IN A,(S2DC)
+001819 0A5C E630             	AND 0x30
+001820 0A5E 210314           	LD HL, IST_D
+001821 0A61 B6               	OR (HL)
+001822 0A62 77               	LD (HL),A
+001823 0A63 DBEE             	IN A,(S2DD)
+001824 0A65 3E30             	LD A,0x30
+001825 0A67 D3EF             	OUT (S2DC),A
+001826 0A69 18BD             	JR RETRND
+001827 0A6B                  
+001828 0A6B                  
+001829 0A6B                  INTST_D:                 ; external status change
+001830 0A6B F5               	PUSH AF
+001831 0A6C E5               	PUSH HL
+001832 0A6D 210314           	LD HL, IST_D
+001833 0A70 7E               	LD A,(HL)
+001834 0A71 E6F5             	AND 0xF5        ; mask away CTS and DCD
+001835 0A73 77               	LD (HL),A
+001836 0A74 AF               	XOR A           ; reset status
+001837 0A75 D3EF             	OUT (S2DC),A
+001838 0A77 DBEF             	IN A,(S2DC)
+001839 0A79 E628             	AND 0x28        ; mask CTS and DCD bits
+001840 0A7B 1F               	RRA
+001841 0A7C 1F               	RRA
+001842 0A7D B6               	OR (HL)
+001843 0A7E 77               	LD (HL),A
+001844 0A7F 3E10             	LD A,0x10       ; reset status
+001845 0A81 D3EF             	OUT (S2DC),A
+001846 0A83 18A3             	JR RETRND
+001847 0A85                  
+001848 0A85                  
+001849 0A85                  CI_D:
+001850 0A85 E5               	PUSH HL
+001851 0A86 218016           	LD HL, IBUF_D
+001852 0A89 1801             	JR TEST1D
+001853 0A8B 76               WAIT1D: HALT
+001854 0A8C CD9B07           TEST1D: CALL EMPTY
+001855 0A8F 28FA             	JR Z, WAIT1D
+001856 0A91 F3               	DI
+001857 0A92 CDA507           	CALL GET
+001858 0A95 FB               	EI
+001859 0A96 E1               	POP HL
+001860 0A97 C9               	RET
+001861 0A98                  
+001862 0A98 E5               CO_D:   PUSH HL
+001863 0A99 21C016           	LD HL, OBUF_D
+001864 0A9C 1801             	JR TEST2D
+001865 0A9E 76               WAIT2D: HALT
+001866 0A9F F3               TEST2D: DI
+001867 0AA0 CDA007           	CALL FULL
+001868 0AA3 FB               	EI
+001869 0AA4 28F8             	JR Z, WAIT2D
+001870 0AA6 3A0314           	LD A,(IST_D)
+001871 0AA9 CB7F             	BIT 7,A
+001872 0AAB 280A             	JR Z, ENDD
+001873 0AAD CBBF             	RES 7,A
+001874 0AAF 320314           	LD (IST_D),A
+001875 0AB2 79               	LD A,C
+001876 0AB3 D3EE             	OUT (S2DD),A
+001877 0AB5 E1               	POP HL
+001878 0AB6 C9               	RET
+001879 0AB7 79               ENDD:   LD A,C
+001880 0AB8 F3               	DI
+001881 0AB9 CDCD07           	CALL PUT
+001882 0ABC FB               	EI
+001883 0ABD E1               	POP HL
+001884 0ABE C9               	RET
+001885 0ABF                   
+001886 0ABF                  CSTS_D:
+001887 0ABF E5               	PUSH HL
+001888 0AC0 218016           	LD HL, IBUF_D
+001889 0AC3 CD9B07           	CALL EMPTY
+001890 0AC6 E1               	POP HL
+001891 0AC7 2002             	JR NZ, CDRESD
+001892 0AC9 AF               	XOR A
+001893 0ACA C9               	RET
+001894 0ACB 3EFF             CDRESD: LD A, 0xFF
+001895 0ACD B7               	OR A
+001896 0ACE C9               	RET 
+001897 0ACF                  ; --------------------- per port routines end D--------
+001898 0ACF                  
+001899 0ACF                  
+001900 0F00                  	.org 0x0f00
+001901 0F00                  INT_TABLE:
+001902 0F00 DA01             	.drw    INTCT_A         ; CTC interrupts: for test purposes only
+001903 0F02 DE01             	.drw    INTCT_B
+001904 0F04 DE01             	.drw    INTCT_C
+001905 0F06 DE01             	.drw    INTCT_D
+001906 0F08                  
+001907 0F10                  	.org 0x0f10
+001908 0F10 AD08             	.drw    INTWR_B         ; SIO 1 channel B
+001909 0F12 FF08             	.drw    INTST_B
+001910 0F14 CC08             	.drw    INTRD_B
+001911 0F16 E808             	.drw    INTER_B
+001912 0F18                  
+001913 0F18 F707             	.drw    INTWR_A         ; SIO 1 channel A
+001914 0F1A 4908             	.drw    INTST_A
+001915 0F1C 1608             	.drw    INTRD_A
+001916 0F1E 3208             	.drw    INTER_A
+001917 0F20                  
+001918 0F20                  	.org 0x0f20
+001919 0F20 190A             	.drw    INTWR_D         ; SIO 2 channel D
+001920 0F22 6B0A             	.drw    INTST_D
+001921 0F24 380A             	.drw    INTRD_D
+001922 0F26 540A             	.drw    INTER_D
+001923 0F28                  
+001924 0F28 6309             	.drw    INTWR_C         ; SIO 2 channel C
+001925 0F2A B509             	.drw    INTST_C
+001926 0F2C 8209             	.drw    INTRD_C
+001927 0F2E 9E09             	.drw    INTER_C
+001928 0F30                  
+001929 0F30                  	.end
+                                                                A1      =037F  CSTS_D  =0ABF  IGNPAR  =0145  PAREVE  =014E  TEST2C  =09E9  
+A11     =0382  CTCA    =00F8  INIT    =0000  PARODD  =014A  TEST2D  =0A9F  
+A2      =0398  CTCB    =00F9  INITSIO =04C4  PDSTR   =04B7  TEXT    =075C  
+A22     =039B  CTCC    =00FA  INPQ    =06C5  POLY    =8005  TSTDLY  =03E8  
+B1      =0639  CTCD    =00FB  INTCT_A =01DA  PORTS   =0432  WAIT1A  =0869  
+B1200   =0125  CTCERR  =0269  INTCT_B =01DE  PRAC    =057D  WAIT1B  =091F  
+B19200  =0139  CTCOK   =0272  INTCT_C =01DE  PRHL    =0594  WAIT1C  =09D5  
+B2      =0638  CTCPTS  =0023  INTCT_D =01DE  PRMPT   =00DD  WAIT1D  =0A8B  
+B2400   =012A  CTCTST  =024B  INTER_A =0832  PRSTR   =00F1  WAIT2A  =087C  
+B3      =0637  DBIT5   =0175  INTER_B =08E8  PRTCFG  =0457  WAIT2B  =0932  
+B4      =0636  DBIT6   =0177  INTER_C =099E  PRTERR  =044C  WAIT2C  =09E8  
+B4800   =012F  DBIT7   =0179  INTER_D =0A54  PSTAB   =0044  WAIT2D  =0A9E  
+B57600  =013F  DBIT8   =017B  INTRD_A =0816  PUT     =07CD  
+B600    =0121  DBSTR   =0115  INTRD_B =08CC  QUERY   =06A7  
+B9600   =0134  DBTAB   =0058  INTRD_C =0982  RAMBEG  =1000  
+BACK    =077D  DELY1   =01B8  INTRD_D =0A38  RAMERR  =0204  
+BACKGO  =0752  DELY2   =01C7  INTST_A =0849  RAMLOP  =022A  
+BAUDTB  =002F  DELY3   =01D1  INTST_B =08FF  RAMRPT  =020D  
+BDSTR   =00E5  DFCFG   =001B  INTST_C =09B5  RAMSZ   =0800  
+BSTAB   =0036  DFCFGA  =001B  INTST_D =0A6B  RAMTST  =01FC  
+BUFDAT  =0003  DFCFGB  =001D  INTWR_A =07F7  RESETA  =02F1  
+C1      =03B4  DFCFGC  =001F  INTWR_B =08AD  RESETB  =02F9  
+C11     =03B7  DFCFGD  =0021  INTWR_C =0963  RESETC  =0302  
+C2      =03CD  ECHO    =03F2  INTWR_D =0A19  RESETD  =030B  
+C22     =03D0  ECHU    =05C7  INT_TABL=0F00  RETRNA  =0806  
+CCSM    =0419  EMPA    =080B  IST_A   =1400  RETRNB  =08BC  
+CCSSTR  =00A4  EMPB    =08C1  IST_B   =1401  RETRNC  =0972  
+CDRESA  =08A9  EMPC    =0977  IST_C   =1402  RETRND  =0A28  
+CDRESB  =095F  EMPD    =0A2D  IST_D   =1403  ROMBEG  =0000  
+CDRESC  =0A15  EMPTY   =079B  ITAB    =000F  ROMERR  =023B  
+CDRESD  =0ACB  ENDA    =0895  LBL1    =0684  ROMOK   =0244  
+CFGBLK  =1404  ENDB    =094B  LENGTH  =05E3  ROMSZ   =1000  
+CFGCSM  =01E1  ENDC    =0A01  LNGDLY  =0000  ROMTST  =022E  
+CFGEND  =140E  ENDD    =0AB7  LOOP    =06D9  ROTAGN  =018A  
+CFGOK   =033D  ENTER   =06D6  LOOP1   =06E4  S1AC    =00F5  
+CFG_AA  =1404  ERRFLSH =01AA  LOOP2   =071F  S1AD    =00F4  
+CFG_AB  =1405  ESCAPE  =03E9  LOOP3   =0726  S1BC    =00F7  
+CFG_BA  =1406  EX0     =059E  LOOP4   =073F  S1BD    =00F6  
+CFG_BB  =1407  EX1     =05A4  LOOPA   =06DC  S1ERR   =02BF  
+CFG_CA  =1408  EX2     =05C1  LPP     =06FB  S2CC    =00ED  
+CFG_CB  =1409  EXPR    =059B  LPPA    =0757  S2CD    =00EC  
+CFG_DA  =140A  FLAGN   =01AD  LPRINT  =05DA  S2DC    =00EF  
+CFG_DB  =140B  FULA    =0829  M3INC   =0503  S2DD    =00EE  
+CHSUM   =140C  FULB    =08DF  M3TST   =050F  S2ERR   =02C8  
+CI_A    =0863  FULC    =0995  MLOOP   =0674  SBSTR   =00FD  
+CI_B    =0919  FULD    =0A4B  MSTART  =0674  SERTOUT =0000  
+CI_C    =09CF  FULL    =07A0  NIBBLE  =05B1  SHTDLY  =1F40  
+CI_D    =0A85  GET     =07A5  NMIST   =0066  SIOOK   =02D1  
+CMNG    =07C3  GOEX    =069E  NOHDWA  =0801  SIOPRM  =140E  
+CMNP    =07EC  HDSHI   =016D  NOHDWB  =08B7  SIOPTS  =0027  
+CMPCRC  =017D  HDSHN   =0157  NOHDWC  =096D  SIOVEC  =002B  
+CONT    =0715  HDSHR   =0165  NOHDWD  =0A23  SSTAB   =004C  
+CONT1   =0717  HDSHX   =015C  NOMGC   =031B  STACK   =1800  
+CONTE   =076E  HELP    =0427  NOPRT   =00BF  START   =01F8  
+CO_A    =0876  HLPSTR  =0072  NOXOR   =0198  STOP1   =0153  
+CO_B    =092C  HSSTR   =0109  NRMLG   =07C0  STOP2   =0155  
+CO_C    =09E2  HSTAB   =0050  NRMLP   =07E9  STRG1   =067F  
+CO_D    =0A98  I2BUF   =0513  NXTBYT  =0185  TAB2    =063C  
+CRCERR  =0314  IBUF_A  =1500  NXTRPT  =01AB  TAB5    =0646  
+CRCRPT  =025B  IBUF_B  =1580  OBUF_A  =1540  TEST1A  =086A  
+CREATE  =078F  IBUF_C  =1600  OBUF_B  =15C0  TEST1B  =0920  
+CRLF    =05D0  IBUF_D  =1680  OBUF_C  =1640  TEST1C  =09D6  
+CSTS_A  =089D  ID1_XC  =036D  OBUF_D  =16C0  TEST1D  =0A8C  
+CSTS_B  =0953  IDLE1   =0352  OUTCH   =0590  TEST2A  =087D  
+CSTS_C  =0A09  IDLE2   =0357  OUTH    =0586  TEST2B  =0933  
+                                                                                   	CALL EX1
+001271 0745 47               	LD B, A
+001272 0746 7D               	LD A, L
+001273 0747 12               	L

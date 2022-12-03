@@ -1,0 +1,421 @@
+000001 0000                  ; Serial interface box software
+000002 0000                  ;
+000003 0000                  ;
+000004 0000                  ;
+000005 0000                  ; 1995
+000006 0000                  ; (c) Dipl.-Ing. Gernot Kunz
+000007 0000                  
+000008 0000                  ; Memory map:
+000009 0000                  ;
+000010 0000                  ;     0000 ROM
+000011 0000                  ;        :        4K ROM
+000012 0000                  ;     0FFF ROM
+000013 0000                  ;     1000 RAM
+000014 0000                  ;        :        2K RAM
+000015 0000                  ;     17FF RAM
+000016 0000                  ;
+000017 0000                  ; IO map:
+000018 0000                  ;
+000019 0000                  ;     F8       CTC A
+000020 0000                  ;     F9       CTC B
+000021 0000                  ;     FA       CTC C
+000022 0000                  ;     FB       CTC D
+000023 0000                  ;
+000024 0000                  ;     F4       SIO 1A data
+000025 0000                  ;     F5       SIO 1A control
+000026 0000                  ;     F6       SIO 1B data
+000027 0000                  ;     F7       SIO 1B control
+000028 0000                  ;
+000029 0000                  ;     EC       SIO 2C data
+000030 0000                  ;     ED       SIO 2C control
+000031 0000                  ;     EE       SIO 2D data
+000032 0000                  ;     EF       SIO 2D control
+000033 0000                  ;
+000034 0000                  ;
+000035 0000                  ; Interrupt table:  0F00 - 0FFF
+000036 0000                  ;
+000037 0000                  ; Status variables:
+000038 0000                  ;
+000039 0000                  ;   Interface status
+000040 0000                  ;
+000041 0000                  ;                  7 6 5 4 3 2 1 0
+000042 0000                  ;                  | | | | |   |
+000043 0000                  ;                  | | | | |   DCD
+000044 0000                  ;                  | | | | CTS
+000045 0000                  ;                  | | | parity error
+000046 0000                  ;                  | | overrun error
+000047 0000                  ;                  | framing error
+000048 0000                  ;                  interface idle  
+000049 0000                  ;
+000050 0000                  ;   Line parameters
+000051 0000                  ;
+000052 0000                  ;   register A     7 6 5 4 3 2 1 0   
+000053 0000                  ;                  | | | | | | | |
+000054 0000                  ;                  | | | | | 0 0 0     600 baud
+000055 0000                  ;                  | | | | | 0 0 1    1200 baud
+000056 0000                  ;                  | | | | | 0 1 0    2400 baud
+000057 0000                  ;                  | | | | | 0 1 1    4800 baud
+000058 0000                  ;                  | | | | | 1 0 0    9600 baud
+000059 0000                  ;                  | | | | | 1 0 1   19200 baud
+000060 0000                  ;                  | | | | | 1 1 0   38400 baud                            
+000061 0000                  ;                  | | | | |
+000062 0000                  ;                  | | | 0 0 no parity
+000063 0000                  ;                  | | | 1 0 parity odd
+000064 0000                  ;                  | | | 1 1 parity even
+000065 0000                  ;                  | | | 
+000066 0000                  ;                  | 0 0 no handshake
+000067 0000                  ;                  | 0 1 XON/XOFF
+000068 0000                  ;                  | 1 0 RTS/CTS
+000069 0000                  ;                  |
+000070 0000                  ;                  0 one stop bit                   
+000071 0000                  ;                  1 two stop bits
+000072 0000                  ;
+000073 0000                  ;   register B     7 6 5 4 3 2 1 0
+000074 0000                  ;                          | | | |
+000075 0000                  ;                          | | 0 0  5 bits/char
+000076 0000                  ;                          | | 0 1  6 bits/char
+000077 0000                  ;                          | | 1 0  7 bits/char
+000078 0000                  ;                          | | 1 1  8 bits/char
+000079 0000                  ;                          | |
+000080 0000                  ;                          0 0 low XOFF treshold 1/4
+000081 0000                  ;                          0 1 medium XOFF treshold 2/4
+000082 0000                  ;                          1 0 high XOFF treshold 3/4
+000083 0000                  ;                          1 1 risky XOFF treshold 4/4
+000084 0000                  
+000085 000F                  	.equ    ITAB,   0x0F    ; Interrupt table offset
+000086 0000                  
+000087 0000                  	.equ    ROMBEG, 0x0000  ; Begin of ROM
+000088 1000                  	.equ    RAMBEG, 0x1000  ; Begin of RAM
+000089 1800                  	.equ    STACK,  0x1800  ; Top of stack
+000090 0800                  	.equ    RAMSZ,  0x800   ; Size of RAM
+000091 1000                  	.equ    ROMSZ,  0x1000  ; Size of ROM
+000092 0000                  
+000093 0000                  	.equ    SERTOUT, 0x0000 ; serial port timeout
+000094 0000                  
+000095 00F8                  	.equ    CTCA,   0xF8
+000096 00F9                  	.equ    CTCB,   0xF9
+000097 00FA                  	.equ    CTCC,   0xFA
+000098 00FB                  	.equ    CTCD,   0xFB
+000099 0000                  
+000100 00F4                  	.equ    S1AD,   0xF4
+000101 00F5                  	.equ    S1AC,   0xF5
+000102 00F6                  	.equ    S1BD,   0xF6
+000103 00F7                  	.equ    S1BC,   0xF7
+000104 0000                  
+000105 00EC                  	.equ    S2CD,   0xEC
+000106 00ED                  	.equ    S2CC,   0xED
+000107 00EE                  	.equ    S2DD,   0xEE
+000108 00EF                  	.equ    S2DC,   0xEF
+000109 0000                  
+000110 1400                  	.org 0x1400
+000111 1400                  IST_A:  .rs 1           ; interface status
+000112 1401                  IST_B:  .rs 1
+000113 1402                  IST_C:  .rs 1
+000114 1403                  IST_D:  .rs 1
+000115 1404                  
+000116 1404                  CFGBLK:
+000117 1404                  CFG_AA: .rs 1           ; configuration
+000118 1405                  CFG_AB: .rs 1
+000119 1406                  
+000120 1406                  CFG_BA: .rs 1
+000121 1407                  CFG_BB: .rs 1
+000122 1408                  
+000123 1408                  CFG_CA: .rs 1
+000124 1409                  CFG_CB: .rs 1
+000125 140A                  
+000126 140A                  CFG_DA: .rs 1
+000127 140B                  CFG_DB: .rs 1
+000128 140C                  
+000129 140C                  CHSUM:  .rs 2           ; configuration checksum
+000130 140E                  CFGEND:
+000131 140E                  SIOPRM: .rs 12          ; SIO parameters        
+000132 141A                  	
+000133 141A                  
+000134 141A                  	; BUFFERS
+000135 141A                  
+000136 1500                  	.org 0x1500
+000137 1500                  IBUF_A: .rs 0x40        ; Buffer Input Port A 
+000138 1540                  OBUF_A: .rs 0x40        ; Buffer Output Port A
+000139 1580                  
+000140 1580                  IBUF_B: .rs 0x40        ; Buffer Input Port B
+000141 15C0                  OBUF_B: .rs 0x40        ; Buffer Output Port B
+000142 1600                  
+000143 1600                  IBUF_C: .rs 0x40        ; Buffer Input Port C
+000144 1640                  OBUF_C: .rs 0x40        ; Buffer Output Port C
+000145 1680                  
+000146 1680                  IBUF_D: .rs 0x40        ; Buffer Input Port D
+000147 16C0                  OBUF_D: .rs 0x40        ; Buffer Output Port D
+000148 1700                  
+000149 0000                  	.org 0x0000
+000150 0000                  
+000151 0000 3E00             	LD A, 0
+000152 0002 CD3B00           	CALL INITSIO
+000153 0005 C32CF1           	JP 0xF12C
+000154 0008                  
+000155 0008 001538           BUFDAT: .db 0x00, 0x15, 0x38      ; data about buffer
+000156 000B 401538           	.db 0x40, 0x15, 0x38
+000157 000E 801538           	.db 0x80, 0x15, 0x38
+000158 0011 A01538           	.db 0xA0, 0x15, 0x38
+000159 0014 001638           	.db 0x00, 0x16, 0x38
+000160 0017 401638           	.db 0x40, 0x16, 0x38
+000161 001A 801638           	.db 0x80, 0x16, 0x38
+000162 001D A01638           	.db 0xA0, 0x16, 0x38
+000163 0020                  
+000164 0020                  DFCFG:                            ; default configuration block
+000165 0020 1A02             DFCFGA: .db 0x1A, 0x02            ; default config port A
+000166 0022 1C02             DFCFGB: .db 0x1C, 0x02            ; default config port B
+000167 0024 1C02             DFCFGC: .db 0x1C, 0x02            ; default config port C
+000168 0026 1C02             DFCFGD: .db 0x1C, 0x02            ; default config port D
+000169 0028                  
+000170 0028                  CTCPTS:  ; table with CTC ports
+000171 0028 F8               	.db CTCA
+000172 0029 F9               	.db CTCB
+000173 002A FA               	.db CTCC
+000174 002B FA               	.db CTCC                  ; baud rates for ports C and D are the same
+000175 002C                  				  ; because the @#! CRC is missing one output
+000176 002C                  				  ; line!
+000177 002C                  
+000178 002C                  SIOPTS:  ; table with SIO ports
+000179 002C F5               	.db S1AC
+000180 002D F7               	.db S1BC
+000181 002E ED               	.db S2CC
+000182 002F EF               	.db S2DC
+000183 0030                  
+000184 0030                  SIOVEC: ; table with SIO interrupt vectors
+000185 0030 10               	.db 0x10
+000186 0031 10               	.db 0x10
+000187 0032 20               	.db 0x20
+000188 0033 20               	.db 0x20
+000189 0034                  
+000190 0034                  BAUDTB:  ; table with CTC values for different baudrates
+000191 0034 60               	.db  96                   ;   600 baud
+000192 0035 30               	.db  48                   ;  1200 baud
+000193 0036 18               	.db  24                   ;  2400 baud
+000194 0037 0C               	.db  12                   ;  4800 baud
+000195 0038 06               	.db   6                   ;  9600 baud
+000196 0039 03               	.db   3                   ; 19200 baud
+000197 003A 01               	.db   1                   ; 57600 baud  
+000198 003B                  
+000199 003B                  
+000200 003B                  INITSIO:        ; initialize SIO channel
+000201 003B                  		; register A contains a number from 0 to 3 designating the
+000202 003B                  		; port
+000203 003B                  					    
+000204 003B 57               	LD D,A          ; channel number into C' and D
+000205 003C                  	
+000206 003C D9               	EXX
+000207 003D 4F               	LD C,A           
+000208 003E CB21             	SLA C           ; multiply by 2
+000209 0040 AF               	XOR A           ; clear B'
+000210 0041 47               	LD B,A
+000211 0042 210414           	LD HL, CFGBLK   ; get config register adress into HL'
+000212 0045 09               	ADD HL, BC
+000213 0046 56               	LD D, (HL)      ; first config register into D' and A
+000214 0047 23               	INC HL
+000215 0048 7E               	LD A, (HL)      ; second config register into A
+000216 0049 5F               	LD E, A
+000217 004A E602             	AND 0x02        ; flip bits of character length selector
+000218 004C 0F               	RRCA         
+000219 004D 0F               	RRCA         
+000220 004E B3               	OR E        
+000221 004F E681             	AND 0x81    
+000222 0051 0F               	RRCA        
+000223 0052 5F               	LD E,A          ; E' now contains SIO conforming char length in 7/6
+000224 0053 7A               	LD A, D
+000225 0054 D9               	EXX
+000226 0055                  
+000227 0055 E607             	AND 0x07        ; mask out baud rate fields
+000228 0057 4F               	LD C, A         ; baud rate number into C
+000229 0058                  
+000230 0058 AF               	XOR A           ; clear B
+000231 0059 47               	LD B,A
+000232 005A 213400           	LD HL, BAUDTB
+000233 005D 09               	ADD HL, BC
+000234 005E 5E               	LD E,(HL)       ; get CTC timer value for baudrate into E
+000235 005F                  
+000236 005F 4A               	LD C,D          ; recall port number
+000237 0060 212800           	LD HL, CTCPTS
+000238 0063 09               	ADD HL, BC
+000239 0064 4E               	LD C, (HL)      ; get CTC port number into C
+000240 0065                  
+000241 0065 3E47             	LD A, 0x47      ; external clock: counter mode
+000242 0067                  
+000243 0067 4A               	LD C, D         ; reset interface status
+000244 0068 210014           	LD HL, IST_A
+000245 006B 09               	ADD HL, BC
+000246 006C 3680             	LD (HL), 0x80   ; interface idle, no errors
+000247 006E                  
+000248 006E 42               	LD B, D         ; multiply port number * 6 and add to BUFDAT
+000249 006F 04               	INC B
+000250 0070 DD210800         	LD IX, BUFDAT
+000251 0074 180C             	JR M3TST
+000252 0076 DD23             M3INC:  INC IX
+000253 0078 DD23             	INC IX
+000254 007A DD23             	INC IX
+000255 007C DD23             	INC IX
+000256 007E DD23             	INC IX
+000257 0080 DD23             	INC IX
+000258 0082 10F2             M3TST:  DJNZ M3INC
+000259 0084                  
+000260 0084 0602             	LD B, 2          ; create 2 ring buffers 
+000261 0086 DD6E00           I2BUF:  LD L, (IX+0)
+000262 0089 DD6601           	LD H, (IX+1)
+000263 008C DD7E02           	LD A, (IX+2)
+000264 008F CDEE00           	CALL CREATE
+000265 0092 DD23             	INC IX
+000266 0094 DD23             	INC IX
+000267 0096 DD23             	INC IX
+000268 0098 10EC             	DJNZ I2BUF
+000269 009A                  	
+000270 009A                  	; now, initialize SIO channel
+000271 009A                  
+000272 009A 4A               	LD C,D          ; recall port number
+000273 009B 212C00           	LD HL, SIOPTS
+000274 009E 09               	ADD HL, BC
+000275 009F 4E               	LD C, (HL)      ; get SIO port number into C
+000276 00A0                  
+000277 00A0 210E14           	LD HL, SIOPRM   ; set HL to area, where SIO parameters are assembled
+000278 00A3 3618             	LD (HL), 0x18   ; channel reset
+000279 00A5 23               	INC HL
+000280 00A6 3601             	LD (HL), 0x01   ; select register 1
+000281 00A8 23               	INC HL
+000282 00A9 3617             	LD (HL), 0x17   ; Int on all characters; parity,  status affects vec.
+000283 00AB 23               	INC HL
+000284 00AC 3602             	LD (HL), 0x02   ; select register 2
+000285 00AE 23               	INC HL
+000286 00AF 7A               	LD A,D          ; get channel number
+000287 00B0                  	
+000288 00B0 D9               	EXX             ; get interrupt vector
+000289 00B1 213000           	LD HL, SIOVEC
+000290 00B4 4F               	LD C,A
+000291 00B5 AF               	XOR A
+000292 00B6 47               	LD B,A
+000293 00B7 09               	ADD HL, BC
+000294 00B8 7E               	LD A,(HL)
+000295 00B9 D9               	EXX
+000296 00BA 77               	LD (HL),A
+000297 00BB 23               	INC HL
+000298 00BC                  	
+000299 00BC 3603             	LD (HL), 0x03  ; select register 3 
+000300 00BE 23               	INC HL
+000301 00BF                  
+000302 00BF D9               	EXX            ; character length from E'
+000303 00C0 7B               	LD A,E
+000304 00C1 D9               	EXX
+000305 00C2 F601             	OR 0x01        ; enable receiver
+000306 00C4 77               	LD (HL), A
+000307 00C5 23               	INC HL
+000308 00C6                  
+000309 00C6 3604             	LD (HL), 0x04  ; select register 4
+000310 00C8 23               	INC HL
+000311 00C9                  
+000312 00C9 D9               	EXX
+000313 00CA 7A               	LD A,D  
+000314 00CB E698             	AND 0x98
+000315 00CD 57               	LD D,A  
+000316 00CE E608             	AND 0x08
+000317 00D0 07               	RLCA    
+000318 00D1 07               	RLCA    
+000319 00D2 B2               	OR D    
+000320 00D3 D9               	EXX
+000321 00D4 E6B0             	AND 0xB0
+000322 00D6 07               	RLCA    
+000323 00D7 07               	RLCA    
+000324 00D8 07               	RLCA    
+000325 00D9 07               	RLCA 
+000326 00DA F644             	OR 0x44       ; add x16 clock mode, stop bit qualifier
+000327 00DC 77               	LD (HL),A
+000328 00DD 23               	INC HL
+000329 00DE                  
+000330 00DE 3605             	LD (HL), 0x05 ; select register 5
+000331 00E0 23               	INC HL
+000332 00E1                  
+000333 00E1 D9               	EXX
+000334 00E2 7B               	LD A,E
+000335 00E3 D9               	EXX
+000336 00E4                  
+000337 00E4 0F               	RRCA
+000338 00E5 F68A             	OR 0x8A
+000339 00E7 77               	LD (HL), A
+000340 00E8                  
+000341 00E8 060B             	LD B,11
+000342 00EA 210E14           	LD HL, SIOPRM
+000343 00ED                  
+000344 00ED C9               	RET
+000345 00EE                  
+000346 00EE                  CREATE:         ; HL points to a buffer, A contains the
+000347 00EE                  		; maxleng value. The buffer is initialized
+000348 00EE                  		; to be empty. AF is destroyed, HL lost.
+000349 00EE                  
+000350 00EE 77               	LD (HL),A       ; maxleng := A
+000351 00EF 23               	INC HL
+000352 00F0 AF               	XOR A
+000353 00F1 77               	LD (HL),A       ; bytesin := 0
+000354 00F2 23               	INC HL
+000355 00F3 77               	LD (HL),A       ; getind := 0
+000356 00F4 23               	INC HL
+000357 00F5 77               	LD (HL),A       ; putind := 0
+000358 00F6 2B               	DEC HL
+000359 00F7 2B               	DEC HL
+000360 00F8 2B               	DEC HL
+000361 00F9 C9               	RET
+000362 00FA                  	.end
+                                                                             BAUDTB  =0034  
+BUFDAT  =0008  
+CFGBLK  =1404  
+CFGEND  =140E  
+CFG_AA  =1404  
+CFG_AB  =1405  
+CFG_BA  =1406  
+CFG_BB  =1407  
+CFG_CA  =1408  
+CFG_CB  =1409  
+CFG_DA  =140A  
+CFG_DB  =140B  
+CHSUM   =140C  
+CREATE  =00EE  
+CTCA    =00F8  
+CTCB    =00F9  
+CTCC    =00FA  
+CTCD    =00FB  
+CTCPTS  =0028  
+DFCFG   =0020  
+DFCFGA  =0020  
+DFCFGB  =0022  
+DFCFGC  =0024  
+DFCFGD  =0026  
+I2BUF   =0086  
+IBUF_A  =1500  
+IBUF_B  =1580  
+IBUF_C  =1600  
+IBUF_D  =1680  
+INITSIO =003B  
+IST_A   =1400  
+IST_B   =1401  
+IST_C   =1402  
+IST_D   =1403  
+ITAB    =000F  
+M3INC   =0076  
+M3TST   =0082  
+OBUF_A  =1540  
+OBUF_B  =15C0  
+OBUF_C  =1640  
+OBUF_D  =16C0  
+RAMBEG  =1000  
+RAMSZ   =0800  
+ROMBEG  =0000  
+ROMSZ   =1000  
+S1AC    =00F5  
+S1AD    =00F4  
+S1BC    =00F7  
+S1BD    =00F6  
+S2CC    =00ED  
+S2CD    =00EC  
+S2DC    =00EF  
+S2DD    =00EE  
+SERTOUT =0000  
+SIOPRM  =140E  
+SIOPTS  =002C  
+SIOVEC  =0030  
+STACK   =1800  
+                             ¡&ã4È@FFÈ;È%9}ÓÎÚe =f &≠ì›ããG[p„…x‚9÷&ã4Èe =f &≠ì›ããWì[WpÿâWâRQìˇwˇwöë8è"üˆGÄuûw=Î5ûr8Î0e =f &≠ì›
