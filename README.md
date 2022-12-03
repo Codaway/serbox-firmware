@@ -8,7 +8,7 @@ to a recording device (for recording data I used a "Psion Organizer" specially p
 
 The box actually has four serial interfaces: one for B&G, one for the masthead display, one for
 the Psion Organizer, and a spare one. Inside the box there are two Z80 SIOs, one CTC to provide
-timing for the SIOs, a Z80 microprocessor, 4K of ROM, 4K of battery buffered static RAM, and
+timing for the SIOs, a Z80 microprocessor, 4K of ROM, 2K of battery buffered static RAM, and
 additional circuitry (5V to +/- 12V boosters for V.24, a signalling LED, clock circuitry, etc.)
 
 The firmware resides in EPROM, but initially copies itself to battery-buffered static RAM, then creates a
