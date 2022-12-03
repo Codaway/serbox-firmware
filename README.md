@@ -24,3 +24,6 @@ And there is a "run" mode, where the masthead display sends queries to a serial 
 the box sends the query out on the other serial interface to the B&G computer. B&G responds, and the response
 is sent back to the masthead display. When the masthead display is not doing queries, B&G transmits other
 data, which is then sent to the recording device.
+
+I also include the Psion Organizer OPL files in this code: the device is capable of multitasking, so one
+program handles the serial interface, the other one copies data into files.
