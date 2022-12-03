@@ -1,0 +1,121 @@
+REM Module NAVCHAN
+REM (c) Dipl.-Ing. Gernot Kunz
+
+REM Read in B&G channel info into a
+REM heap data structure
+
+
+PROC getchn:(fn$) REM get channel info
+REM IMPORT chlst%
+LOCAL p%
+LOCAL bgnr%, intrem%
+LOCAL ch1%
+LOCAL chstr$(5), bgstr$(10), vlstr$(10)
+REM node info: 32 bytes, offsets:
+REM  0 refnr 1 reference number
+REM  1 bgnr  1 b&g channel number
+REM  2 inrem 1 Internal, Remote, Special
+REM  3 prec  1 precision 0,1,2
+REM  4 srate 1 scan interval seconds
+REM  5 lrate 1 log interval seconds
+REM  6 sgnc  1 sign character
+REM  7 ignc  1 ignore character
+REM  8 minv  2 minimal value
+REM 10 maxv  2 maximal value
+REM 12 circ  1 circular (T)rue or (F)alse
+REM    filler 1
+REM 14 chtxt 2 channel text string
+REM 16 next  2 next channel node
+REM 18 lasts 4 time of last scan
+REM 22 lastl 4 time of last log
+REM 26 dval  2 data value
+REM 28 bgstr 2 b&g scan string
+REM 30 vlstr 2 b&g validation string
+
+freechl:(chlst%)
+chlst%=0
+
+OPEN fn$,A,refnr$,bgnr$,intrem$,prec$,srate$,lrate$,sgnc$,ignc$,minv$,maxv$,circ$,chtxt$
+WHILE NOT EOF
+	p%=ALLOC(32)
+	IF p% = 0
+		RAISE -10
+	ENDIF
+
+	bgnr%=VAL(A.bgnr$)
+	intrem%=ASC(A.intrem$)
+
+	IF intrem%=%I OR intrem%=%R
+		ch1%=bgnr%/10
+		chstr$=CHR$(ch1%+%0)
+		chstr$=chstr$+CHR$(bgnr%-(ch1%)*10+%0)
+		bgstr$="#OI,"+chstr$
+		IF intrem%=%R
+			bgstr$=bgstr$+",1"
+		ENDIF
+		vlstr$=CHR$(intrem%)+chstr$+","
+	ELSE
+		bgstr$=""
+		vlstr$=""
+	ENDIF
+
+	POKEB p%,VAL(A.refnr$)
+	POKEB UADD(p%,1),bgnr%
+	POKEB UADD(p%,2),intrem%
+	POKEB UADD(p%,3),VAL(A.prec$)
+	POKEB UADD(p%,4),VAL(A.srate$)
+	POKEB UADD(p%,5),VAL(A.lrate$)
+	POKEB UADD(p%,6),ASC(A.sgnc$)
+	POKEB UADD(p%,7),ASC(A.ignc$)
+	POKEW UADD(p%,8),VAL(A.minv$)
+	POKEW UADD(p%,10),VAL(A.maxv$)
+	POKEB UADD(p%,12),ASC(A.circ$)
+	POKEW UADD(p%,14),allcp%:(A.chtxt$)
+	POKEW UADD(p%,16),chlst%
+	POKEL UADD(p%,18),0
+	POKEL UADD(p%,22),0
+	POKEW UADD(p%,28),allcp%:(bgstr$)
+	POKEW UADD(p%,30),allcp%:(vlstr$)
+	chlst%=p%
+
+	NEXT
+ENDWH
+CLOSE
+
+ENDP REM getchn
+
+
+PROC allcp%:(str$) REM allocate and string copy
+LOCAL i%,j%,s%
+
+i%=LEN(str$)
+s%=ALLOC(i%+1)
+IF s% = 0
+	RAISE -10
+ENDIF
+
+POKEB s%, i%
+j%=1
+WHILE i%
+	POKEB UADD(s%,j%),ASC(MID$(str$,j%,1))
+	i%=i%-1
+	j%=j%+1
+ENDWH
+
+RETURN s%
+ENDP REM allcp
+
+
+PROC freechl:(chlst%) REM free channel list
+LOCAL p%, q%
+
+p%=chlst%
+
+WHILE p% <> 0
+	FREEALLOC PEEKW(UADD(p%,14))
+	q%=p%
+	p%=PEEKW(UADD(p%,16))
+	FREEALLOC q%
+ENDWH
+
+ENDP REM freechs

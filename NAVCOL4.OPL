@@ -1,0 +1,598 @@
+PROC navcol:
+REM 4.1
+REM (c) Dipl.-Ing Gernot Kunz
+
+REM Connect to B&G Hercules Computer
+REM Get NAV data and store:
+REM one data segment containing
+REM records with
+REM actual values and a data file
+REM logging
+REM values continuously
+
+LOCAL cfg$(30)   REM serial config file
+LOCAL baud%,par%,dbits%,sbits%,fctl%
+
+GLOBAL chlst% REM channel list and ptr
+LOCAL p%
+
+GLOBAL yy%,mm%,dd%,hh%,mi%,ss%,du%
+LOCAL lhour%
+GLOBAL lfile$(30)
+GLOBAL lfh%       REM logfile handle
+
+LOCAL scan%, log% REM flags for current channel
+GLOBAL ret%       REM Return code
+LOCAL fvs%        REM file version
+
+LOCAL tb%(7)      REM OS temporary buffer
+GLOBAL regs%(6)    REM OS registers
+
+GLOBAL now&   REM actual time
+GLOBAL now%   REM Pointer to now&
+GLOBAL nowh%  REM Pointer to now& msb
+GLOBAL ltm&   REM log time reference
+GLOBAL td&,td% REM time difference
+
+GLOBAL com$(60),cad%,ch%,num%
+GLOBAL lat&,lon&   REM Last pos in mMins
+GLOBAL lat%,lon%   REM Adresses
+GLOBAL p1%,p2%,p3% REM Pos compact
+
+GLOBAL rstot& REM Serial timeout
+GLOBAL tim%   REM timer channel
+
+LOCAL ssg%       REM scan segment handle
+LOCAL ssg$(15)   REM scan sgmt name
+GLOBAL sfb$(255) REM scan file buffer
+GLOBAL sfb%   REM scan file buffer addr
+GLOBAL sfp%   REM scan file pointer
+GLOBAL svc%   REM scan file value count
+
+GLOBAL lfb%   REM log file buffer addr
+GLOBAL lfp%   REM log file pointer
+GLOBAL lvc%   REM log file value count
+GLOBAL lfm%   REM log file maximum
+GLOBAL cpid%  REM collector PID
+
+CACHE $0400,$FFFF
+REM Put program in background
+CALL($198d,100,0) :gUPDATE
+
+REM get own PID
+regs%(1)=$00*256  REM ProcID
+ret%=OS($88,ADDR(regs%())) AND 1
+cpid%=regs%(1)
+
+LOADM "NAVCHAN"
+
+REM channel info
+CACHE OFF
+getchn:("M:\DAT\NAVCHAN.DBF")
+UNLOADM "NAVCHAN"
+CACHE ON
+
+REM initialize some variables
+sfb%=ADDR(sfb$)
+lat%=ADDR(lat&)
+lon%=ADDR(lon&)
+now%=ADDR(now&)
+nowh%=UADD(now%,2)
+rstot&=50  REM 5 second timeout
+fvs%=0
+ltm&=0
+ssg$="BGSCAN.DAT"+CHR$(0)
+cfg$="M:\NAV\RS232.CFG"
+lhour%=-1
+lfile$=""
+
+REM Initialize serial port
+TRAP OPENR cfg$,A,baud%,par%,dbits%,sbits%,fctl%
+IF ERR
+	PRINT "Cannot open RS232 config:",ERR
+	GET
+	STOP
+ENDIF
+
+baud%=A.baud% :par%=A.par%-1 :dbits%=A.dbits%+4
+sbits%=A.sbits% :fctl%=4
+CLOSE
+
+REM LOPEN "TTY:A"
+REM rsset:(baud%,par%,dbits%,sbits%,fctl%,&2400)
+
+REM Open timer channel
+ret%=IOOPEN(tim%, "TIM:", 0)
+IF ret%
+	PRINT "Cannot open timer:",ret%
+	GET
+	STOP
+ENDIF
+
+REM Open scan values segment
+regs%(1)=$03*256
+regs%(2)=UADD(ADDR(ssg$),1)
+ret%=OS($80,ADDR(regs%())) AND 1
+
+IF ret%=1
+	REM Create segment
+	regs%(1)=$01*256+1
+	regs%(2)=UADD(ADDR(ssg$),1)
+	regs%(3)=17
+	ret%=OS($80,ADDR(regs%())) AND 1
+	IF ret%=1
+		PRINT "SegCreate failed"
+		GET
+		STOP
+	ENDIF
+ENDIF
+
+ssg%=regs%(1)
+
+rept::
+regs%(1)=$02*256 REM TimGetSystemTime
+OS($89, ADDR(regs%()))
+POKEW now%,regs%(2)
+POKEW nowh%, regs%(1)
+SECSTODATE now&,yy%,mm%,dd%,hh%,mi%,ss%,du%
+
+REM Prepare scan and log file buffers
+sfp%=UADD(sfb%,4)
+IF lfb%=0
+	lfm%=20
+	lfb%=ALLOC(lfm%*3)
+	IF lfb%=0
+		RAISE -10
+	ENDIF
+ENDIF
+lfp%=lfb%
+svc%=0
+lvc%=0
+
+p%=chlst%
+WHILE p%
+	scan%=0: log%=0
+	IF PEEKL(UADD(p%,18))+PEEKB(UADD(p%,4))<=now&
+		scan%=1
+	ENDIF
+
+	IF PEEKL(UADD(p%,22))+PEEKB(UADD(p%,5))<=now&
+		scan%=1
+		log%=1
+	ENDIF
+
+	IF scan% REM Scan data value
+		IF PEEKB(p%)=130
+			getpos%:
+			REM add position to scan buffer
+			add2sc:(130, p1%)
+			add2sc:(129, p2%)
+			add2sc:(128, p3%)
+		ELSE
+			add2sc:(PEEKB(p%),bgscan%:(p%))
+		ENDIF
+		POKEL UADD(p%,18),now&
+	ENDIF
+
+	IF log% REM log data value
+		IF lhour% <> hh%
+			wrtlog:
+			mklogn:
+			ltm&=0
+			lhour%=hh%
+		ENDIF
+		td&=now&-ltm&
+		ltm&=now&
+		IF td& > 32767
+			add2lg:(255,PEEKW(UADD(ADDR(now&),2)))
+			add2lg:(254,PEEKW(ADDR(now&)))
+			td&=0
+		ENDIF
+		td%=PEEKW(ADDR(td&))
+		IF td%<>0
+			add2lg:(252,td%)
+		ENDIF
+		IF PEEKB(p%)=130
+			getpos%:
+			REM add position to scan buffer
+			add2lg:(130,p1%)
+			add2lg:(129,p2%)
+			add2lg:(128,p3%)
+		ELSE
+			add2lg:(PEEKB(p%),PEEKW(UADD(p%,26)))
+		ENDIF
+
+		POKEL UADD(p%,22),now&
+	ENDIF
+
+	p%=PEEKW(UADD(p%,16))
+ENDWH
+
+IF svc% > 0
+	POKEW sfb%,cpid%
+	POKEB UADD(sfb%,3), svc%
+	POKEB UADD(sfb%,2), fvs%
+	REM Write to segment
+	regs%(1)=$08*256
+	regs%(2)=ssg%
+	regs%(3)=svc%*3+4
+	regs%(4)=0
+	regs%(5)=sfb%
+	regs%(6)=0
+	ret%=OS($80,ADDR(regs%())) AND 1
+
+	fvs%=fvs%+1
+	IF fvs% > 100
+		fvs%=0
+	ENDIF
+ENDIF
+
+wrtlog:
+
+GOTO rept
+ENDP REM navcol
+
+
+PROC wrtlog: REM Write out log file
+REM IMPORT lfile$,lvc%,lfp%
+LOCAL i%, lftot%
+IF lfile$<>""
+	IF lvc% > 0
+		lfp%=lfb%
+		i%=0
+		IF NOT EXIST(lfile$)
+			ret%=IOOPEN(lfh%,lfile$,$0101)
+			IF ret%
+				PRINT "Logfile create failed:",ret%
+				GET
+				STOP
+			ENDIF
+		ELSE
+			lftot%=100
+			DO
+				ret%=IOOPEN(lfh%,lfile$,$0103)
+				PAUSE 2
+				lftot%=lftot%-1
+			UNTIL ret% = 0 OR lftot%<=0
+		ENDIF
+		IF lftot% <= 0 AND ret% <> 0
+			PRINT "Logfile open failed:",ret%
+			GET
+			STOP
+		ENDIF
+		WHILE i% < lvc%
+			ret%=IOWRITE(lfh%,lfp%,3)
+			IF ret% <> 0
+				PRINT "Logfile write failed:",ret%
+				GET
+				STOP
+			ENDIF
+			lfp%=UADD(lfp%,3)
+			i%=i%+1
+		ENDWH
+		ret%=IOCLOSE(lfh%)
+		IF ret%
+			PRINT "Logfile close failed:",ret%
+			GET
+			STOP
+		ENDIF
+		lvc%=0
+		lfp%=sfb%
+	ENDIF
+ENDIF
+ENDP REM wrtlog
+
+
+PROC mklogn: REM Name of new log file
+REM IMPORT yy%,mm%,dd%,hh%
+REM IMPORT lfile$
+LOCAL args%(4), fmt$(40), fmt%
+
+args%(1)=yy% - (yy%/100)*100
+args%(2)=mm%
+args%(3)=dd% :args%(4)=hh%
+
+fmt$="M:\NAV\%02d%02d%02d%02d.DAT"+CHR$(0)
+fmt%=ADDR(fmt$)
+
+regs%(1)=$04*256 REM ConvArgumentsToBuffer
+regs%(2)=ADDR(args%(1))
+regs%(5)=UADD(fmt%,1)
+regs%(6)=UADD(ADDR(lfile$),1)
+
+ret%=OS($8A, ADDR(regs%())) AND 1
+POKEB ADDR(lfile$),regs%(1)
+
+ENDP REM mklogn
+
+
+PROC add2sc:(chan%,val%) REM add value to scan file buffer
+REM IMPORT svc%,sfb%,sfp%
+POKEB sfp%, chan%
+POKEW UADD(sfp%,1), val%
+sfp%=UADD(sfp%,3)
+svc%=svc%+1
+ENDP REM add2sc
+
+
+PROC add2lg:(chan%,val%) REM add value to log file
+REM IMPORT lvc%,lfm%,lfb%,lfp%
+LOCAL timed&
+
+IF lvc% >= lfm%
+	lfb%=REALLOC(lfb%, 3*lvc%)
+	lfm%=lvc%
+	lfp%=3*lvc%
+ENDIF
+
+POKEB lfp%,chan%
+POKEW UADD(lfp%,1),val%
+
+lfp%=UADD(lfp%,3)
+lvc%=lvc%+1
+ENDP REM add2lg
+
+
+PROC bgscan%:(p%) REM Scan a B&G channel
+LOCAL ostr$(10),ir$(2)
+LOCAL vstr$(10),sgn%,prec%
+
+prec%=PEEKB(UADD(p%,3))
+ir$=CHR$(PEEKB(UADD(p%,2)))
+ostr$=PEEK$(PEEKW(UADD(p%,28)))
+vstr$=PEEK$(PEEKW(UADD(p%,30)))
+
+rsscan:(ostr$)
+sgn%=1
+IF vfychan%:(vstr$)=1
+	IF ch% = PEEKB(UADD(p%,7)) 
+		cad%=UADD(cad%,1) REM Ignore
+	ELSEIF ch% = PEEKB(UADD(p%,6))
+		sgn%=-1           REM sign char
+		cad%=UADD(cad%,1)
+	ENDIF
+
+	psnum:
+	IF num% <> -9999
+		IF prec% = 1
+			psfrc1:
+		ELSEIF prec% =2
+			psfrc2:
+		ENDIF
+		IF num% <> -9999
+			num%=num%*sgn%
+		ENDIF
+	ENDIF
+ENDIF
+
+POKEW UADD(p%,26), num%
+RETURN num%
+ENDP REM bgscan
+
+
+PROC rsscan:(ostr$)
+regs%(1)=$02*256 REM TimGetSystemTime
+OS($89, ADDR(regs%()))
+POKEW now%,regs%(2)
+POKEW nowh%, regs%(1)
+SECSTODATE now&,yy%,mm%,dd%,hh%,mi%,ss%,du%
+
+cad%=UADD(ADDR(com$),1)
+IF ostr$="#OI,00"
+	com$="I00,H12.2"
+ELSEIF ostr$="#OI,01"
+	com$="I01,9.23"
+ELSEIF ostr$="#OI,05"
+	com$="I05,130"
+ELSEIF ostr$="#OI,10"
+	com$="I10,A12.6"
+ELSEIF ostr$="#OI,11"
+	com$="I11,19.4"
+ELSEIF ostr$="#OI,12"
+	com$="I12,T9.3"
+ELSEIF ostr$="#OI,13"
+	com$="I13,53-"
+ELSEIF ostr$="#OI,14"
+	com$="I14,73="
+ELSEIF ostr$="#OI,15"
+	com$="I15,192"
+ELSEIF ostr$="#OI,25"
+	com$="I25,C131"
+ELSEIF ostr$="#OI,27"
+	com$="I27,21.0"
+ELSEIF ostr$="#OI,00,1"
+	com$="R00,132"
+ELSEIF ostr$="#OI,03,1"
+	com$="R03,9.5"
+ELSEIF ostr$="#OL"
+	com$="  2310.00,S,12345.67,W"
+ELSE
+  com$="ERR"
+ENDIF
+com$=com$+CHR$(13)
+PAUSE 1
+ENDP REM rsscan
+
+
+PROC rssca:(ostr$) REM Read from RS-232
+REM IMPORT now&, com$, cad%, rstot&, tim%
+LOCAL ret%, cln%, tot%
+LOCAL tend&
+
+LPRINT ostr$
+cad%=ADDR(com$)
+cln%=60
+
+regs%(1)=$02*256 REM TimGetSystemTime
+OS($89, ADDR(regs%()))
+POKEW now%,regs%(2)
+POKEW nowh%, regs%(1)
+SECSTODATE now&,yy%,mm%,dd%,hh%,mi%,ss%,du%
+
+tend&=now&+rstot%
+
+IOC(-1,1,ret%,#UADD(cad%,1),cln%)
+IOC(tim%,1,tot%,rstot&,rstot&)
+
+IOWAIT
+
+IF ret% = -46 REM Timeout
+	IOCANCEL(-1)
+	IOWAITSTAT ret%
+ELSE          REM cancel timeout
+	IOCANCEL(tim%)
+	IOWAITSTAT tot%
+ENDIF 
+
+IF ret%<0 REM Error or timeout
+	POKEB cad%,0
+ELSE
+	POKEB cad%,cln%-1
+ENDIF
+
+cad%=UADD(cad%,1)
+
+regs%(1)=$02*256 REM TimGetSystemTime
+OS($89, ADDR(regs%()))
+POKEW now%,regs%(2)
+POKEW nowh%, regs%(1)
+SECSTODATE now&,yy%,mm%,dd%,hh%,mi%,ss%,du%
+ENDP REM rsscan
+
+
+PROC rsset:(baud%,par%,dat%,stp%,hds%,term&)
+LOCAL frame%,srchar%(6),dummy%,err%
+
+	frame%=dat%-5
+	IF stp%=2 :frame%=frame% OR 16 :ENDIF
+	IF par%   :frame%=frame% OR 32 :ENDIF
+	srchar%(1)=baud% OR (baud%*256)
+	srchar%(2)=frame% OR (par%*256)
+	srchar%(3)=(hds% AND 255) OR $1100
+	srchar%(4)=13
+	POKEL ADDR(srchar%(5)),term&
+	err%=IOW(-1,7,srchar%(1),dummy%)
+	IF err% :RAISE err% :ENDIF
+ENDP REM rsset
+
+
+PROC psnum:   REM extract number from string
+REM IMPORT cad%,ch%,num%
+
+num%=0
+
+REM remove blanks
+ch%=PEEKB(cad%)
+WHILE ch%=% 
+cad%=UADD(cad%,1)
+ch%=PEEKB(cad%)
+ENDWH
+
+REM collect whole number part
+WHILE ch%>=%0 AND ch%<=%9
+	num%=num%*10+ch%-%0
+	cad%=UADD(cad%,1)
+	ch%=PEEKB(cad%)
+ENDWH
+
+IF num%=0 AND ch%=%F
+	num%=-9999
+ENDIF
+ENDP REM psnum
+
+
+PROC psfrc1:  REM Parse 1-digit fraction
+REM IMPORT com$,cad%,ch%,num%
+
+num%=num%*10
+
+IF ch%=%.
+	ch%=PEEKB(UADD(cad%,1))
+	IF %0<=ch% AND ch%<=%9
+		num%=num%+ch%-%0
+	ENDIF
+ENDIF
+ENDP REM psfrc1
+
+
+PROC psfrc2:  REM Parse 2-digit fraction
+REM IMPORT cad%,ch%,num%
+
+num%=num%*100
+
+IF ch%=%.
+	ch%=PEEKB(UADD(cad%,1))
+
+	IF %0<=ch% AND ch%<=%9
+		num%=num%+(ch%-%0)*10
+		ch%=PEEKB(UADD(cad%,2))
+
+		IF %0<=ch% AND ch%<=%9
+			num%=num%+ch%-%0
+		ENDIF
+	ENDIF
+ENDIF
+ENDP REM psfrc2
+
+
+PROC vfychan%:(chan$) REM verify B&G channel
+REM IMPORT com$,cad%,ch%,num%
+
+IF LEFT$(chan$,4)=LEFT$(com$,4)
+	cad%=UADD(cad%,4)
+	ch%=PEEKB(cad%)
+	RETURN 1
+ELSE
+	num%=-9999
+	RETURN 0
+ENDIF
+ENDP REM vfychan
+
+
+PROC getpos%:  REM Position (GPS)
+REM IMPORT com$,cad%,lat&,lon&,lat%,lon%
+REM IMPORT p1%, p2%, p3%
+
+rsscan:("#OL")
+
+IF PEEKB(UADD(cad%,10))<>13 AND PEEKB(cad%)<>0
+	lat&=ival&:(MID$(com$,3,2))
+	lat&=lat&*60+ival&:(MID$(com$,5,2))
+	lat&=lat&*100+ival&:(MID$(com$,8,2))
+	lat&=lat&*10
+	IF PEEKB(UADD(cad%,10))=%S
+		lat&=-lat&
+	ENDIF
+	lon&=ival&:(MID$(com$,13,3))
+	lon&=lon&*60+ival&:(MID$(com$,16,2))
+	lon&=lon&*100+ival&:(MID$(com$,19,2))
+	lon&=lon&*10
+	IF PEEKB(UADD(cad%,21))=%W
+		lon&=-lon&
+	ENDIF
+ELSE
+	lat&=0
+	lon&=0
+ENDIF
+
+p1%=PEEKW(lat%)
+p2%=PEEKW(lon%)
+POKEB ADDR(p3%),PEEKB(UADD(lat%,2))
+POKEB UADD(ADDR(p3%),1),PEEKB(UADD(lon%,2))
+
+ENDP REM getpos
+
+
+PROC ival&:(strg$)  REM convert string to int
+LOCAL lstrg$(20), temp&
+
+lstrg$=strg$+CHR$(0)
+
+regs%(1)=$0800
+regs%(5)=UADD(ADDR(lstrg$),1)
+OS($8A, ADDR(regs%()))
+
+POKEW ADDR(temp&),regs%(2)
+POKEW UADD(ADDR(temp&),1),regs%(1)
+RETURN temp&
+ENDP REM ival&
